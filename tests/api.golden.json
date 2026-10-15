@@ -1,0 +1,2042 @@
+{
+ "/v1/transfers/d%3A1%3A1": {
+  "status": 200,
+  "body": {
+   "key": "d:1:1",
+   "direction": "deposit",
+   "ref": 1,
+   "status": "seen",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "ETH",
+   "amount": "500000",
+   "amount_raw": null,
+   "domain": "1",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "mainnet",
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.005 ETH",
+   "flags": [],
+   "hasProof": false,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "5 of 12 confirmations on Ethereum",
+    "percent": 38,
+    "etaSeconds": 89,
+    "exact": true,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/d%3A1%3A2": {
+  "status": 200,
+  "body": {
+   "key": "d:1:2",
+   "direction": "deposit",
+   "ref": 2,
+   "status": "seen",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "ETH",
+   "amount": "5000000",
+   "amount_raw": null,
+   "domain": "1",
+   "src_block": 990,
+   "src_time": 1799928000,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "mainnet",
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.05 ETH",
+   "flags": [],
+   "hasProof": false,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "waiting for Ethereum to finalize",
+    "percent": 95,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/d%3A1%3A3": {
+  "status": 200,
+  "body": {
+   "key": "d:1:3",
+   "direction": "deposit",
+   "ref": 3,
+   "status": "provable",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "ETH",
+   "amount": "5000000",
+   "amount_raw": null,
+   "domain": "1",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": 1799999900,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "mainnet",
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.05 ETH",
+   "flags": [],
+   "hasProof": true,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "waiting for Ethereum to finalize",
+    "percent": 6,
+    "etaSeconds": 930,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/d%3A137%3A4": {
+  "status": 200,
+  "body": {
+   "key": "d:137:4",
+   "direction": "deposit",
+   "ref": 4,
+   "status": "provable",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "POL",
+   "amount": "7000000",
+   "amount_raw": null,
+   "domain": "137",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": 1799999900,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "polygon",
+   "asset": {
+    "symbol": "POL",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.07 POL",
+   "flags": [],
+   "hasProof": true,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "waiting for Polygon PoS to finalize",
+    "percent": 95,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/d%3A56%3A5": {
+  "status": 200,
+  "body": {
+   "key": "d:56:5",
+   "direction": "deposit",
+   "ref": 5,
+   "status": "provable",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "BNB",
+   "amount": "7000000",
+   "amount_raw": null,
+   "domain": "56",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": 1799999900,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "bsc",
+   "asset": {
+    "symbol": "BNB",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.07 BNB",
+   "flags": [],
+   "hasProof": true,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "waiting for BNB Smart Chain to finalize",
+    "percent": 95,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/d%3A137%3A6": {
+  "status": 200,
+  "body": {
+   "key": "d:137:6",
+   "direction": "deposit",
+   "ref": 6,
+   "status": "provable",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "POL",
+   "amount": "7000000",
+   "amount_raw": null,
+   "domain": "137",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": 1799999900,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "polygon",
+   "asset": {
+    "symbol": "POL",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.07 POL",
+   "flags": [],
+   "hasProof": true,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "waiting for Polygon PoS to finalize",
+    "percent": 95,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/w%3A7": {
+  "status": 200,
+  "body": {
+   "key": "w:7",
+   "direction": "withdrawal",
+   "ref": 7,
+   "status": "expired",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "BNB",
+   "amount": "3000000",
+   "amount_raw": null,
+   "domain": "56",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xburn",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": 1799999990,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "bsc",
+   "asset": {
+    "symbol": "BNB",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.03 BNB",
+   "flags": [
+    "unfrozen",
+    "past-deadline",
+    "rolled-back"
+   ],
+   "hasProof": false,
+   "track": null,
+   "secondsToDeadline": -10,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "expired unpaid on BNB Smart Chain; refunding on Telos",
+    "percent": 90,
+    "etaSeconds": null,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/w%3A8": {
+  "status": 200,
+  "body": {
+   "key": "w:8",
+   "direction": "withdrawal",
+   "ref": 8,
+   "status": "burned",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "ETH",
+   "amount": "3000000",
+   "amount_raw": null,
+   "domain": "1",
+   "src_block": 1200,
+   "src_time": 1799999940,
+   "src_tx": "0xburn",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": 1800086400,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "mainnet",
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.03 ETH",
+   "flags": [],
+   "hasProof": true,
+   "track": "light",
+   "secondsToDeadline": 86400,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "burned on Telos; freezing its proof",
+    "percent": 25,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/w%3A9": {
+  "status": 200,
+  "body": {
+   "key": "w:9",
+   "direction": "withdrawal",
+   "ref": 9,
+   "status": "provable",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "ETH",
+   "amount": "3000000",
+   "amount_raw": null,
+   "domain": "1",
+   "src_block": 1200,
+   "src_time": 1799999940,
+   "src_tx": "0xburn",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": 1800086400,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "mainnet",
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.03 ETH",
+   "flags": [],
+   "hasProof": true,
+   "track": "light",
+   "secondsToDeadline": 86400,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "ready: release it on Ethereum",
+    "percent": 50,
+    "etaSeconds": null,
+    "exact": true,
+    "waitingOn": "user"
+   }
+  }
+ },
+ "/v1/transfers/w%3A10": {
+  "status": 200,
+  "body": {
+   "key": "w:10",
+   "direction": "withdrawal",
+   "ref": 10,
+   "status": "burned",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": null,
+   "amount": "3000000",
+   "amount_raw": null,
+   "domain": "999",
+   "src_block": 1200,
+   "src_time": 1799999940,
+   "src_tx": "0xburn",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": null,
+   "chain": null,
+   "asset": null,
+   "amountHuman": null,
+   "flags": [],
+   "hasProof": true,
+   "track": "hard",
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "burned on Telos; freezing its proof",
+    "percent": 25,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/d%3A1181148696416462999%3A12": {
+  "status": 200,
+  "body": {
+   "key": "d:1181148696416462999:12",
+   "direction": "deposit",
+   "ref": 12,
+   "status": "seen",
+   "account": "alice",
+   "evm_address": "bob",
+   "token": "00a6823403ea30550857415800000000",
+   "symbol": "WAX",
+   "amount": "2000000000",
+   "amount_raw": null,
+   "domain": "1181148696416462999",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "wax",
+   "asset": {
+    "symbol": "WAX",
+    "precision": 8,
+    "contract": "eosio.token"
+   },
+   "amountHuman": "20 WAX",
+   "flags": [],
+   "hasProof": false,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "WAX producers confirming",
+    "percent": 95,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/w%3A13": {
+  "status": 200,
+  "body": {
+   "key": "w:13",
+   "direction": "withdrawal",
+   "ref": 13,
+   "status": "burned",
+   "account": "alice",
+   "evm_address": "bob",
+   "token": "00a6823403ea30550857415800000000",
+   "symbol": "WAX",
+   "amount": "2000000000",
+   "amount_raw": null,
+   "domain": "1181148696416462999",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xburn",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "wax",
+   "asset": {
+    "symbol": "WAX",
+    "precision": 8,
+    "contract": "eosio.token"
+   },
+   "amountHuman": "20 WAX",
+   "flags": [],
+   "hasProof": false,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "WAX release by the relayer",
+    "percent": 53,
+    "etaSeconds": 47,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/d%3A1%3A14": {
+  "status": 200,
+  "body": {
+   "key": "d:1:14",
+   "direction": "deposit",
+   "ref": 14,
+   "status": "credited",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "ETH",
+   "amount": "500000",
+   "amount_raw": null,
+   "domain": "1",
+   "src_block": 1000,
+   "src_time": 1799999940,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": 1799999970,
+   "dst_tx": "cafe",
+   "deadline": null,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "mainnet",
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.005 ETH",
+   "flags": [],
+   "hasProof": false,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "credited on Telos",
+    "percent": 100,
+    "etaSeconds": null,
+    "exact": true,
+    "waitingOn": null
+   }
+  }
+ },
+ "/v1/transfers/d%3A56%3A15": {
+  "status": 200,
+  "body": {
+   "key": "d:56:15",
+   "direction": "deposit",
+   "ref": 15,
+   "status": "seen",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "BNB",
+   "amount": "7000000",
+   "amount_raw": null,
+   "domain": "56",
+   "src_block": 49999990,
+   "src_time": 1799956800,
+   "src_tx": "0xt",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": null,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "bsc",
+   "asset": {
+    "symbol": "BNB",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.07 BNB",
+   "flags": [],
+   "hasProof": false,
+   "track": null,
+   "secondsToDeadline": null,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "waiting for BNB Smart Chain to finalize",
+    "percent": 95,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/w%3A16": {
+  "status": 200,
+  "body": {
+   "key": "w:16",
+   "direction": "withdrawal",
+   "ref": 16,
+   "status": "burned",
+   "account": "alice",
+   "evm_address": "0xabc",
+   "token": "0x0000000000000000000000000000000000000000",
+   "symbol": "ETH",
+   "amount": "3000000",
+   "amount_raw": null,
+   "domain": "1",
+   "src_block": 2500,
+   "src_time": 1799999940,
+   "src_tx": "0xburn",
+   "dst_block": null,
+   "dst_time": null,
+   "dst_tx": null,
+   "deadline": 1800086400,
+   "proof_at": null,
+   "refund_tx": null,
+   "memo": null,
+   "updated_at": 1800000000,
+   "precision": 8,
+   "chain": "mainnet",
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8,
+    "address": "0x0000000000000000000000000000000000000000"
+   },
+   "amountHuman": "0.03 ETH",
+   "flags": [],
+   "hasProof": true,
+   "track": "hard",
+   "secondsToDeadline": 86400,
+   "hop": null,
+   "swap": null,
+   "progress": {
+    "stage": "burned on Telos; freezing its proof",
+    "percent": 25,
+    "etaSeconds": 5,
+    "exact": false,
+    "waitingOn": "bridge"
+   }
+  }
+ },
+ "/v1/transfers/nope": {
+  "status": 404,
+  "body": {
+   "error": "no such transfer"
+  }
+ },
+ "/v1/pending": {
+  "status": 200,
+  "body": {
+   "pending": [
+    {
+     "key": "w:16",
+     "direction": "withdrawal",
+     "action": "submitRoot + release (~2.6M gas)",
+     "pushOn": "mainnet",
+     "ready": true,
+     "reason": "burned and not yet released",
+     "proof": "/v1/proofs/w:16",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "3000000",
+     "symbol": "ETH",
+     "precision": 8,
+     "deadline": {
+      "at": 1800086400,
+      "secondsLeft": 86400,
+      "what": "after this only expire is possible, not release"
+     }
+    },
+    {
+     "key": "w:13",
+     "direction": "withdrawal",
+     "action": "released by the WAX relayer",
+     "pushOn": "wax",
+     "ready": false,
+     "reason": "WAX release by the relayer",
+     "proof": null,
+     "account": "alice",
+     "evmAddress": "bob",
+     "amount": "2000000000",
+     "symbol": "WAX",
+     "precision": 8
+    },
+    {
+     "key": "d:1181148696416462999:12",
+     "direction": "deposit",
+     "action": "proved by the WAX relayer",
+     "pushOn": "telos",
+     "ready": false,
+     "reason": "WAX producers confirming",
+     "proof": null,
+     "account": "alice",
+     "evmAddress": "bob",
+     "amount": "2000000000",
+     "symbol": "WAX",
+     "precision": 8
+    },
+    {
+     "key": "w:10",
+     "direction": "withdrawal",
+     "action": "submitRoot + release (~2.6M gas)",
+     "pushOn": "domain 999",
+     "ready": true,
+     "reason": "burned and not yet released",
+     "proof": "/v1/proofs/w:10",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "3000000",
+     "symbol": null,
+     "precision": null
+    },
+    {
+     "key": "w:9",
+     "direction": "withdrawal",
+     "action": "release (~135k gas)",
+     "pushOn": "mainnet",
+     "ready": true,
+     "reason": "burned and not yet released",
+     "proof": "/v1/proofs/w:9",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "3000000",
+     "symbol": "ETH",
+     "precision": 8,
+     "deadline": {
+      "at": 1800086400,
+      "secondsLeft": 86400,
+      "what": "after this only expire is possible, not release"
+     }
+    },
+    {
+     "key": "w:8",
+     "direction": "withdrawal",
+     "action": "release (~135k gas)",
+     "pushOn": "mainnet",
+     "ready": true,
+     "reason": "burned and not yet released",
+     "proof": "/v1/proofs/w:8",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "3000000",
+     "symbol": "ETH",
+     "precision": 8,
+     "deadline": {
+      "at": 1800086400,
+      "secondsLeft": 86400,
+      "what": "after this only expire is possible, not release"
+     }
+    },
+    {
+     "key": "v:7",
+     "direction": "withdrawal-rollback",
+     "action": "proveroot + voided",
+     "pushOn": "telos",
+     "ready": true,
+     "reason": "voided on the far side; the burned amount can be reissued",
+     "proof": "/v1/proofs/v:7",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "3000000",
+     "symbol": "BNB",
+     "precision": 8
+    },
+    {
+     "key": "d:137:6",
+     "direction": "deposit",
+     "action": "proveroot + credit (finalized)",
+     "pushOn": "telos",
+     "ready": true,
+     "reason": "proved and not yet credited on the settlement chain",
+     "proof": "/v1/proofs/d:137:6",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "7000000",
+     "symbol": "POL",
+     "precision": 8
+    },
+    {
+     "key": "d:56:5",
+     "direction": "deposit",
+     "action": "proveroot + credit (finalized)",
+     "pushOn": "telos",
+     "ready": true,
+     "reason": "proved and not yet credited on the settlement chain",
+     "proof": "/v1/proofs/d:56:5",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "7000000",
+     "symbol": "BNB",
+     "precision": 8
+    },
+    {
+     "key": "d:137:4",
+     "direction": "deposit",
+     "action": "proveroot + credit (finalized)",
+     "pushOn": "telos",
+     "ready": true,
+     "reason": "proved and not yet credited on the settlement chain",
+     "proof": "/v1/proofs/d:137:4",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "7000000",
+     "symbol": "POL",
+     "precision": 8
+    },
+    {
+     "key": "d:1:3",
+     "direction": "deposit",
+     "action": "proveroot + credit (finalized)",
+     "pushOn": "telos",
+     "ready": true,
+     "reason": "proved and not yet credited on the settlement chain",
+     "proof": "/v1/proofs/d:1:3",
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "5000000",
+     "symbol": "ETH",
+     "precision": 8
+    },
+    {
+     "key": "d:1:1",
+     "direction": "deposit",
+     "action": "waiting",
+     "pushOn": "telos",
+     "ready": false,
+     "reason": "5 of 12 confirmations; about 84 s more",
+     "proof": null,
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "500000",
+     "symbol": "ETH",
+     "precision": 8,
+     "deadline": {
+      "at": 1800049092,
+      "secondsLeft": 49092,
+      "what": "after this the ancestry no longer fits in one transaction"
+     }
+    },
+    {
+     "key": "d:56:15",
+     "direction": "deposit",
+     "action": "waiting",
+     "pushOn": "telos",
+     "ready": false,
+     "reason": "BNB Smart Chain votes finality into its own headers — about 32 s (1 s–65 s)",
+     "proof": null,
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "7000000",
+     "symbol": "BNB",
+     "precision": 8
+    },
+    {
+     "key": "d:1:2",
+     "direction": "deposit",
+     "action": "waiting",
+     "pushOn": "telos",
+     "ready": false,
+     "reason": "amount is above what this route credits on an unfinalized proof (5000000 > 1000000); waiting for finality — about 17 min (13 min–20 min)",
+     "proof": null,
+     "account": "alice",
+     "evmAddress": "0xabc",
+     "amount": "5000000",
+     "symbol": "ETH",
+     "precision": 8,
+     "deadline": {
+      "at": 1799977152,
+      "secondsLeft": -22848,
+      "what": "after this the ancestry no longer fits in one transaction"
+     }
+    }
+   ],
+   "count": 14,
+   "asOf": 1800000000
+  }
+ },
+ "/v1/proofs/d%3A1%3A1": {
+  "status": 404,
+  "body": {
+   "error": "no proof available yet",
+   "status": "seen",
+   "fastUnavailable": "5 of 12 confirmations; about 84 s more"
+  }
+ },
+ "/v1/proofs/d%3A1%3A2": {
+  "status": 404,
+  "body": {
+   "error": "no proof available yet",
+   "status": "seen",
+   "fastUnavailable": "amount is above what this route credits on an unfinalized proof (5000000 > 1000000)"
+  }
+ },
+ "/v1/proofs/d%3A1%3A3": {
+  "status": 200,
+  "body": {
+   "key": "d:1:3",
+   "kind": "deposit",
+   "direction": "deposit",
+   "pushOn": "telos",
+   "blockNumber": 1000,
+   "track": "finalized",
+   "finalized": {
+    "note": "the chain can no longer abandon this block; never goes stale",
+    "signedBy": "400/512",
+    "ancestryHeaders": 64,
+    "actions": [
+     {
+      "account": "eth.lc.alcor",
+      "name": "proveroot",
+      "data": [
+       "pay.alcor",
+       {
+        "slot": 1
+       },
+       "s",
+       "b",
+       "kk",
+       "ag",
+       [],
+       [],
+       [],
+       "r",
+       [],
+       1000,
+       [],
+       "h",
+       [],
+       [],
+       "sr",
+       []
+      ]
+     },
+     {
+      "account": "eth.g.alcor",
+      "name": "credit",
+      "data": [
+       "pay.alcor",
+       "h",
+       "80",
+       [
+        "n"
+       ],
+       1
+      ]
+     }
+    ]
+   },
+   "fastUnavailable": "amount is above what this route credits on an unfinalized proof (5000000 > 1000000)"
+  }
+ },
+ "/v1/proofs/d%3A137%3A4": {
+  "status": 200,
+  "body": {
+   "key": "d:137:4",
+   "kind": "deposit",
+   "direction": "deposit",
+   "pushOn": "telos",
+   "blockNumber": 900,
+   "track": "finalized",
+   "finalized": {
+    "note": "the chain can no longer abandon this block; never goes stale",
+    "signedBy": "400/512",
+    "ancestryHeaders": 3,
+    "actions": [
+     {
+      "account": "eth.lc.alcor",
+      "name": "proveroot",
+      "data": [
+       "pay.alcor",
+       {
+        "slot": 1
+       },
+       "s",
+       "b",
+       "kk",
+       "ag",
+       [],
+       [],
+       [],
+       "r",
+       [],
+       1000,
+       [],
+       "h",
+       [],
+       [],
+       "sr",
+       []
+      ]
+     },
+     {
+      "account": "pol.g.alcor",
+      "name": "creditcp",
+      "data": [
+       "pay.alcor",
+       "137",
+       "cp",
+       "bor",
+       "h",
+       "80",
+       [
+        "n"
+       ],
+       1
+      ]
+     }
+    ]
+   },
+   "fastUnavailable": "polygon finalizes in seconds; there is no fast track to offer"
+  }
+ },
+ "/v1/proofs/d%3A56%3A5": {
+  "status": 200,
+  "body": {
+   "key": "d:56:5",
+   "kind": "deposit",
+   "direction": "deposit",
+   "pushOn": "telos",
+   "blockNumber": 49999900,
+   "track": "finalized",
+   "finalized": {
+    "note": "BSC finalizes in about a second; this proof is final and cannot go stale",
+    "signedBy": "15/21",
+    "epoch": 49999000,
+    "finalizedBy": 49999902,
+    "actions": [
+     {
+      "account": "bsc.lc.alcor",
+      "name": "proveroot",
+      "data": [
+       "pay.alcor",
+       "header",
+       "vote"
+      ]
+     },
+     {
+      "account": "bsc.g.alcor",
+      "name": "credit",
+      "data": [
+       "pay.alcor",
+       "h",
+       "80",
+       [
+        "n"
+       ],
+       0
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "/v1/proofs/d%3A137%3A6": {
+  "status": 404,
+  "body": {
+   "error": "no proof available yet",
+   "status": "provable",
+   "reason": "pol.lc.alcor holds no validator set; bootstrap it"
+  }
+ },
+ "/v1/proofs/v%3A7": {
+  "status": 200,
+  "body": {
+   "key": "v:7",
+   "kind": "void",
+   "direction": "withdrawal-rollback",
+   "pushOn": "telos",
+   "blockNumber": 49999950,
+   "track": "finalized",
+   "finalized": {
+    "note": "BSC finalizes in about a second; this proof is final and cannot go stale",
+    "signedBy": "15/21",
+    "epoch": 49999000,
+    "finalizedBy": 49999952,
+    "actions": [
+     {
+      "account": "bsc.lc.alcor",
+      "name": "proveroot",
+      "data": [
+       "pay.alcor",
+       "header",
+       "vote"
+      ]
+     },
+     {
+      "account": "bsc.g.alcor",
+      "name": "voided",
+      "data": [
+       "pay.alcor",
+       "h",
+       "80",
+       [
+        "n"
+       ],
+       0
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "/v1/proofs/w%3A8": {
+  "status": 200,
+  "body": {
+   "key": "w:8",
+   "direction": "withdrawal",
+   "chain": "mainnet",
+   "burnBlock": 1200,
+   "rootBlock": 1210,
+   "vault": "0x3e447d533321ad6a8412f97034ac295a9ff8d858",
+   "status": "burned",
+   "deadline": 1800086400,
+   "hard": {
+    "gas": "~2.4M + 176k",
+    "submitRootTo": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
+    "releaseTo": "0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6",
+    "submitRoot": {
+     "finality": {
+      "activeGeneration": 1,
+      "lastPendingGeneration": 1,
+      "finalityMroot": "ff"
+     },
+     "pending": {
+      "policy": "0x",
+      "bits": "0x",
+      "signature": "0x"
+     }
+    },
+    "release": {
+     "domain": "1",
+     "id": 9,
+     "blockNum": 1200
+    }
+   },
+   "lightUnavailable": "no checkpoint before block 1200; a branch cannot be built without one",
+   "track": "hard"
+  }
+ },
+ "/v1/proofs/w%3A9": {
+  "status": 200,
+  "body": {
+   "key": "w:9",
+   "direction": "withdrawal",
+   "chain": "mainnet",
+   "burnBlock": 1200,
+   "rootBlock": 1210,
+   "vault": "0x3e447d533321ad6a8412f97034ac295a9ff8d858",
+   "status": "provable",
+   "deadline": 1800086400,
+   "hard": {
+    "gas": "~2.4M + 176k",
+    "submitRootTo": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
+    "releaseTo": "0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6",
+    "submitRoot": {
+     "finality": {
+      "activeGeneration": 1,
+      "lastPendingGeneration": 1,
+      "finalityMroot": "ff"
+     },
+     "pending": {
+      "policy": "0x",
+      "bits": "0x",
+      "signature": "0x"
+     }
+    },
+    "release": {
+     "domain": "1",
+     "id": 9,
+     "blockNum": 1200
+    }
+   },
+   "lightUnavailable": "no checkpoint before block 1200; a branch cannot be built without one",
+   "track": "hard"
+  }
+ },
+ "/v1/proofs/w%3A10": {
+  "status": 200,
+  "body": {
+   "key": "w:10",
+   "direction": "withdrawal",
+   "chain": null,
+   "warning": "no chain with id 999 in the registry",
+   "burnBlock": 1200,
+   "rootBlock": 1210,
+   "vault": "0x3e447d533321ad6a8412f97034ac295a9ff8d858",
+   "status": "burned",
+   "deadline": null,
+   "hard": {
+    "gas": "~2.4M + 176k",
+    "submitRootTo": null,
+    "releaseTo": null,
+    "submitRoot": {
+     "finality": {
+      "activeGeneration": 1,
+      "lastPendingGeneration": 1,
+      "finalityMroot": "ff"
+     },
+     "pending": {
+      "policy": "0x",
+      "bits": "0x",
+      "signature": "0x"
+     }
+    },
+    "release": {
+     "domain": "999",
+     "id": 9,
+     "blockNum": 1200
+    }
+   },
+   "track": "hard",
+   "lightUnavailable": "no trusted root covers this burn yet"
+  }
+ },
+ "/v1/proofs/w%3A11": {
+  "status": 404,
+  "body": {
+   "error": "no such transfer"
+  }
+ },
+ "/v1/proofs/d%3A1181148696416462999%3A12": {
+  "status": 404,
+  "body": {
+   "error": "no proof available yet",
+   "status": "seen",
+   "fastUnavailable": "WAX deposits are proved by its relayer; there is no fast track to offer"
+  }
+ },
+ "/v1/proofs/nope": {
+  "status": 404,
+  "body": {
+   "error": "no such transfer"
+  }
+ },
+ "/v1/chains": {
+  "status": 200,
+  "body": {
+   "settlement": {
+    "id": "telos",
+    "accounts": {
+     "bridge": "bridge.alcor",
+     "token": "tok.alcor",
+     "lightClient": "eth.lc.alcor",
+     "gateway": "eth.g.alcor",
+     "hop": "hop.alcor"
+    },
+    "hopMemo": {
+     "format": "<domain>:<recipient>|<domain>:<recipient>[|<memo>]",
+     "example": "1181148696416462999:route.alcor|1:0x…|alice|403.5737 TLM@alien.worlds|1760300000",
+     "maxBytes": 256
+    },
+    "swaps": {
+     "route": "route.alcor",
+     "memo": {
+      "format": "<to>|<least out>@<token contract>|<deadline>[|<back>]",
+      "example": "alice|403.5737 TLM@alien.worlds|1760300000",
+      "exampleOnward": "56:0x5b38da6a701c568545dcfcb03fcb875f56beddc4|99.500000 USDT@wrap.alcor|1760300000|137:0x5b38da6a701c568545dcfcb03fcb875f56beddc4",
+      "maxBytes": 256,
+      "maxWait": 604800
+     },
+     "venues": [
+      {
+       "account": "swap.alcor",
+       "kind": "amm"
+      }
+     ],
+     "alcorApi": "https://telos.alcor.exchange"
+    },
+    "at": 5000,
+    "head": 5000,
+    "caughtUp": true,
+    "note": "one state-history stream and one finality tree serve every source chain"
+   },
+   "sources": [
+    {
+     "id": "mainnet",
+     "name": "Ethereum",
+     "chainId": 1,
+     "strategy": "beacon",
+     "head": 1005,
+     "provedTop": {
+      "block": 990,
+      "hash": "aa",
+      "at": "2027-01-15T08:00:00",
+      "signers": 400
+     },
+     "behind": 15,
+     "lightClient": {
+      "account": "eth.lc.alcor",
+      "contract": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00"
+     },
+     "gateway": "eth.g.alcor",
+     "contracts": {
+      "vault": "0x3e447d533321ad6a8412f97034ac295a9ff8d858",
+      "withdrawals": "0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6"
+     },
+     "upkeep": null,
+     "timing": {
+      "deposit": {
+       "seconds": 990,
+       "range": [
+        768,
+        1212
+       ],
+       "parts": [
+        {
+         "what": "Ethereum must finalize the block",
+         "seconds": 960
+        },
+        {
+         "what": "the relayer picks the finished proof up",
+         "seconds": 30
+        }
+       ],
+       "measured": true,
+       "human": "about 17 min (13 min–20 min)"
+      },
+      "withdrawal": {
+       "seconds": 55,
+       "range": [
+        13,
+        110
+       ],
+       "parts": [
+        {
+         "what": "Telos must finalize the burn",
+         "seconds": 1
+        },
+        {
+         "what": "the relayer picks the finished proof up",
+         "seconds": 30
+        },
+        {
+         "what": "the release confirms on Ethereum",
+         "seconds": 24
+        }
+       ],
+       "measured": true,
+       "human": "about 55 s (13 s–2 min)"
+      }
+     },
+     "active": {
+      "deposits": false,
+      "withdrawals": true,
+      "reason": "the vault does not take these assets yet"
+     },
+     "deposits": {
+      "supported": true
+     },
+     "routes": [
+      {
+       "kind": "backing",
+       "symbol": "ETH",
+       "precision": 8,
+       "token": "0x0000000000000000000000000000000000000000",
+       "minDeposit": "10000",
+       "cap": "0",
+       "scale": "10000000000",
+       "available": "90000000",
+       "minWithdrawal": "10000",
+       "maxWithdrawal": "50000000",
+       "fastMax": "1000000",
+       "minConfirmations": 12,
+       "deposits": true,
+       "withdrawals": true,
+       "withdrawMemo": "1:0x<recipient>",
+       "outflowPerDay": "0",
+       "outflowLeft": "0",
+       "withdrawableNow": "0",
+       "vaultCap": null,
+       "vaultHeld": "0",
+       "depositableNow": null,
+       "vaultEnabled": false
+      }
+     ],
+     "swaps": null
+    },
+    {
+     "id": "bsc",
+     "name": "BNB Smart Chain",
+     "chainId": 56,
+     "strategy": "parlia",
+     "head": 50000000,
+     "provedTop": null,
+     "behind": null,
+     "lightClient": {
+      "account": "bsc.lc.alcor",
+      "contract": "0x4b956b92c8aedc1f3f47243396ed53828c163b46"
+     },
+     "gateway": "bsc.g.alcor",
+     "contracts": {
+      "vault": "0x53f18eaa8bf8099b5ba21bb7e11ed311b677690e",
+      "withdrawals": "0x6132b4d02e02f1b378f0fc67c3d4f553eb76acb5"
+     },
+     "upkeep": null,
+     "timing": {
+      "deposit": {
+       "seconds": 32,
+       "range": [
+        1,
+        65
+       ],
+       "parts": [
+        {
+         "what": "BNB Smart Chain votes finality into its own headers",
+         "seconds": 2
+        },
+        {
+         "what": "the relayer picks the finished proof up",
+         "seconds": 30
+        }
+       ],
+       "measured": true,
+       "human": "about 32 s (1 s–65 s)"
+      },
+      "withdrawal": {
+       "seconds": 32,
+       "range": [
+        1,
+        64
+       ],
+       "parts": [
+        {
+         "what": "Telos must finalize the burn",
+         "seconds": 1
+        },
+        {
+         "what": "the relayer picks the finished proof up",
+         "seconds": 30
+        },
+        {
+         "what": "the release confirms on BNB Smart Chain",
+         "seconds": 1
+        }
+       ],
+       "measured": true,
+       "human": "about 32 s (1 s–64 s)"
+      }
+     },
+     "active": {
+      "deposits": false,
+      "withdrawals": true,
+      "reason": "the vault does not take these assets yet"
+     },
+     "deposits": {
+      "supported": true
+     },
+     "routes": [
+      {
+       "kind": "backing",
+       "symbol": "BNB",
+       "precision": 8,
+       "token": "0x0000000000000000000000000000000000000000",
+       "minDeposit": "10000",
+       "cap": "0",
+       "scale": "10000000000",
+       "available": "90000000",
+       "minWithdrawal": "10000",
+       "maxWithdrawal": "50000000",
+       "fastMax": "0",
+       "minConfirmations": 12,
+       "deposits": true,
+       "withdrawals": true,
+       "withdrawMemo": "56:0x<recipient>",
+       "outflowPerDay": "0",
+       "outflowLeft": "0",
+       "withdrawableNow": "0",
+       "vaultCap": null,
+       "vaultHeld": "0",
+       "depositableNow": null,
+       "vaultEnabled": false
+      }
+     ],
+     "swaps": null
+    },
+    {
+     "id": "polygon",
+     "name": "Polygon PoS",
+     "chainId": 137,
+     "strategy": "milestone",
+     "head": 70000000,
+     "provedTop": null,
+     "behind": null,
+     "lightClient": {
+      "account": "pol.lc.alcor",
+      "contract": "0x38f3118ca7e2bfe9e1c1b8d15071fb47cdbae3dd"
+     },
+     "gateway": "pol.g.alcor",
+     "contracts": {
+      "vault": "0x15bbd21148f98c4daeb30450eb05666f7859993d",
+      "withdrawals": "0xb0510e20f12f88cbc63b9a5d8ae3e052a7153fb8"
+     },
+     "upkeep": null,
+     "timing": {
+      "deposit": {
+       "seconds": 38,
+       "range": [
+        5,
+        80
+       ],
+       "parts": [
+        {
+         "what": "a Heimdall milestone over the block and the next one after it",
+         "seconds": 8
+        },
+        {
+         "what": "the relayer picks the finished proof up",
+         "seconds": 30
+        }
+       ],
+       "measured": true,
+       "human": "about 38 s (5 s–80 s)"
+      },
+      "withdrawal": {
+       "seconds": 34,
+       "range": [
+        3,
+        68
+       ],
+       "parts": [
+        {
+         "what": "Telos must finalize the burn",
+         "seconds": 1
+        },
+        {
+         "what": "the relayer picks the finished proof up",
+         "seconds": 30
+        },
+        {
+         "what": "the release confirms on Polygon PoS",
+         "seconds": 3
+        }
+       ],
+       "measured": true,
+       "human": "about 34 s (3 s–68 s)"
+      }
+     },
+     "active": {
+      "deposits": false,
+      "withdrawals": true,
+      "reason": "the vault does not take these assets yet"
+     },
+     "deposits": {
+      "supported": true
+     },
+     "routes": [
+      {
+       "kind": "backing",
+       "symbol": "POL",
+       "precision": 8,
+       "token": "0x0000000000000000000000000000000000000000",
+       "minDeposit": "10000",
+       "cap": "0",
+       "scale": "10000000000",
+       "available": "90000000",
+       "minWithdrawal": "10000",
+       "maxWithdrawal": "50000000",
+       "fastMax": "0",
+       "minConfirmations": 12,
+       "deposits": true,
+       "withdrawals": true,
+       "withdrawMemo": "137:0x<recipient>",
+       "outflowPerDay": "0",
+       "outflowLeft": "0",
+       "withdrawableNow": "0",
+       "vaultCap": null,
+       "vaultHeld": "0",
+       "depositableNow": null,
+       "vaultEnabled": false
+      }
+     ],
+     "swaps": null
+    },
+    {
+     "id": "wax",
+     "name": "WAX",
+     "kind": "antelope",
+     "chainId": "1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4",
+     "domain": "1181148696416462999",
+     "strategy": "producers",
+     "head": 400000050,
+     "provedTop": {
+      "block": 400000000,
+      "hash": "ef",
+      "at": "",
+      "signers": 6
+     },
+     "behind": 50,
+     "lightClient": {
+      "account": "wax.lc.alcor",
+      "contract": "tls.lc.alcor"
+     },
+     "gateway": "wax.g.alcor",
+     "contracts": {
+      "vault": "bridge.alcor",
+      "withdrawals": "bridge.alcor",
+      "mirror": null
+     },
+     "upkeep": {
+      "kind": "producer schedules",
+      "note": "both light clients learn schedule changes from proofs; a lag here means the relayer has not proved the change yet",
+      "waxOnTelos": {
+       "held": 7,
+       "active": 7,
+       "lag": 0
+      },
+      "telosOnWax": {
+       "held": 5,
+       "active": 5,
+       "lag": 0
+      },
+      "keeper": null
+     },
+     "deposits": {
+      "supported": true
+     },
+     "timing": {
+      "deposit": {
+       "seconds": 50,
+       "range": [
+        39,
+        102
+       ],
+       "parts": [
+        {
+         "what": "WAX producers build two rounds of 2/3+1 on top of the block",
+         "seconds": 42
+        },
+        {
+         "what": "the relayer proves it on Telos",
+         "seconds": 8
+        }
+       ],
+       "measured": true,
+       "human": "about 50 s (39 s–2 min)"
+      },
+      "withdrawal": {
+       "seconds": 107,
+       "range": [
+        84,
+        175
+       ],
+       "parts": [
+        {
+         "what": "Telos finalizes the burn",
+         "seconds": 2
+        },
+        {
+         "what": "2/3+1 of Telos producers build on the certificate",
+         "seconds": 90
+        },
+        {
+         "what": "the relayer releases it on WAX",
+         "seconds": 15
+        }
+       ],
+       "measured": true,
+       "human": "about 2 min (84 s–3 min)"
+      }
+     },
+     "active": {
+      "deposits": true,
+      "withdrawals": true
+     },
+     "routes": [
+      {
+       "kind": "backing",
+       "symbol": "WAX",
+       "precision": 8,
+       "token": null,
+       "antelopeToken": {
+        "contract": "eosio.token",
+        "symbol": "WAX",
+        "precision": 8
+       },
+       "minDeposit": "100000",
+       "cap": "0",
+       "scale": "1",
+       "available": "5000000",
+       "minWithdrawal": "100000",
+       "maxWithdrawal": "10000000",
+       "fastMax": "0",
+       "minConfirmations": 0,
+       "deposits": true,
+       "withdrawals": true,
+       "withdrawMemo": "1181148696416462999:<account>",
+       "depositMemo": "<telos account>[:<note>]",
+       "outflowPerDay": null,
+       "outflowLeft": null,
+       "withdrawableNow": "5000000",
+       "depositableNow": null
+      }
+     ],
+     "accountFormat": "^[a-z1-5.]{1,12}$",
+     "swaps": {
+      "route": "route.alcor",
+      "memo": {
+       "format": "<to>|<least out>@<token contract>|<deadline>[|<back>]",
+       "example": "alice|403.5737 TLM@alien.worlds|1760300000",
+       "exampleOnward": "56:0x5b38da6a701c568545dcfcb03fcb875f56beddc4|99.500000 USDT@wrap.alcor|1760300000|137:0x5b38da6a701c568545dcfcb03fcb875f56beddc4",
+       "maxBytes": 256,
+       "maxWait": 604800
+      },
+      "venues": [
+       {
+        "account": "swap.alcor",
+        "kind": "amm"
+       },
+       {
+        "account": "alcordexmain",
+        "kind": "book"
+       }
+      ],
+      "alcorApi": "https://wax.alcor.exchange"
+     }
+    }
+   ]
+  }
+ },
+ "/v1/routes": {
+  "status": 200,
+  "body": {
+   "routes": [
+    {
+     "symbol": "ETH",
+     "precision": 8,
+     "from": "mainnet",
+     "to": "telos",
+     "via": null,
+     "open": false,
+     "reason": "Ethereum takes no ETH deposits now: the vault does not take these assets yet; the Ethereum vault does not take ETH yet",
+     "min": "10000",
+     "max": null,
+     "how": {
+      "deposit": {
+       "token": "0x0000000000000000000000000000000000000000",
+       "telosTo": "<telos account>"
+      }
+     }
+    },
+    {
+     "symbol": "ETH",
+     "precision": 8,
+     "from": "telos",
+     "to": "mainnet",
+     "via": null,
+     "open": false,
+     "reason": "the Ethereum vault's daily ETH limit is used up",
+     "min": "10000",
+     "max": "0",
+     "how": {
+      "transfer": {
+       "memo": "1:0x<recipient>"
+      }
+     }
+    },
+    {
+     "symbol": "BNB",
+     "precision": 8,
+     "from": "bsc",
+     "to": "telos",
+     "via": null,
+     "open": false,
+     "reason": "BNB Smart Chain takes no BNB deposits now: the vault does not take these assets yet; the BNB Smart Chain vault does not take BNB yet",
+     "min": "10000",
+     "max": null,
+     "how": {
+      "deposit": {
+       "token": "0x0000000000000000000000000000000000000000",
+       "telosTo": "<telos account>"
+      }
+     }
+    },
+    {
+     "symbol": "BNB",
+     "precision": 8,
+     "from": "telos",
+     "to": "bsc",
+     "via": null,
+     "open": false,
+     "reason": "the BNB Smart Chain vault's daily BNB limit is used up",
+     "min": "10000",
+     "max": "0",
+     "how": {
+      "transfer": {
+       "memo": "56:0x<recipient>"
+      }
+     }
+    },
+    {
+     "symbol": "POL",
+     "precision": 8,
+     "from": "polygon",
+     "to": "telos",
+     "via": null,
+     "open": false,
+     "reason": "Polygon PoS takes no POL deposits now: the vault does not take these assets yet; the Polygon PoS vault does not take POL yet",
+     "min": "10000",
+     "max": null,
+     "how": {
+      "deposit": {
+       "token": "0x0000000000000000000000000000000000000000",
+       "telosTo": "<telos account>"
+      }
+     }
+    },
+    {
+     "symbol": "POL",
+     "precision": 8,
+     "from": "telos",
+     "to": "polygon",
+     "via": null,
+     "open": false,
+     "reason": "the Polygon PoS vault's daily POL limit is used up",
+     "min": "10000",
+     "max": "0",
+     "how": {
+      "transfer": {
+       "memo": "137:0x<recipient>"
+      }
+     }
+    },
+    {
+     "symbol": "WAX",
+     "precision": 8,
+     "from": "wax",
+     "to": "telos",
+     "via": null,
+     "open": true,
+     "min": "100000",
+     "max": null,
+     "how": {
+      "transfer": {
+       "contract": "eosio.token",
+       "memo": "<telos account>[:<note>]"
+      }
+     }
+    },
+    {
+     "symbol": "WAX",
+     "precision": 8,
+     "from": "telos",
+     "to": "wax",
+     "via": null,
+     "open": true,
+     "min": "100000",
+     "max": "5000000",
+     "how": {
+      "transfer": {
+       "memo": "1181148696416462999:<account>"
+      }
+     }
+    }
+   ],
+   "count": 8
+  }
+ },
+ "/health": {
+  "status": 200,
+  "body": {
+   "instance": "golden",
+   "status": "degraded",
+   "docs": "/docs",
+   "uptimeSeconds": 0,
+   "alarms": [
+    "deposit #2 is 20.0h old and its route takes finalized proofs only, so it can no longer be proved in one transaction",
+    "mainnet light client holds generation 0, Telos is on 185",
+    "mainnet: no handover stored for generation 1; the indexer builds one a few seconds after publication, and once state-history has pruned it only the policy admin's setPolicy can move the light client past it",
+    "bsc light client holds generation 0, Telos is on 185",
+    "bsc: no handover stored for generation 1; the indexer builds one a few seconds after publication, and once state-history has pruned it only the policy admin's setPolicy can move the light client past it",
+    "polygon light client holds generation 0, Telos is on 185",
+    "polygon: no handover stored for generation 1; the indexer builds one a few seconds after publication, and once state-history has pruned it only the policy admin's setPolicy can move the light client past it",
+    "ram: http://telos.test/v1/chain/get_account -> HTTP 400"
+   ],
+   "savanna": {
+    "chain": "telos",
+    "at": 5000,
+    "head": 5000,
+    "behind": 0,
+    "behindSeconds": 0,
+    "caughtUp": true,
+    "leaves": 0,
+    "frozen": 0,
+    "mismatches": 0,
+    "window": {
+     "bytes": 0
+    }
+   },
+   "sources": [
+    {
+     "chain": "mainnet",
+     "at": 1005,
+     "head": 1005,
+     "behind": 0,
+     "caughtUp": true,
+     "seenThisRun": {
+      "deposits": 0,
+      "frozen": 0,
+      "headRaces": 0
+     },
+     "wiring": "as configured",
+     "lastError": null
+    },
+    {
+     "chain": "bsc",
+     "at": 50000000,
+     "head": 50000000,
+     "behind": 0,
+     "caughtUp": true,
+     "seenThisRun": {
+      "deposits": 0,
+      "frozen": 0,
+      "headRaces": 0
+     },
+     "wiring": "as configured",
+     "lastError": null
+    },
+    {
+     "chain": "polygon",
+     "at": 70000000,
+     "head": 70000000,
+     "behind": 0,
+     "caughtUp": true,
+     "seenThisRun": {
+      "deposits": 0,
+      "frozen": 0,
+      "headRaces": 0
+     },
+     "wiring": "as configured",
+     "lastError": null
+    }
+   ],
+   "trustedRoots": 2,
+   "committee": {
+    "error": "tls.lc.alcor holds no committee at all — bootstrap first"
+   },
+   "ram": {
+    "error": "http://telos.test/v1/chain/get_account -> HTTP 400"
+   },
+   "transfers": {
+    "deposit.credited": 1,
+    "deposit.provable": 4,
+    "deposit.seen": 4,
+    "withdrawal.burned": 4,
+    "withdrawal.expired": 1,
+    "withdrawal.provable": 1
+   },
+   "storage": {
+    "proofs": {
+     "count": 10,
+     "bytes": 2963
+    },
+    "committees": {
+     "count": 1,
+     "bytes": 4
+    },
+    "leafBytes": 0
+   },
+   "incidents": []
+  }
+ }
+}

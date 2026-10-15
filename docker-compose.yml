@@ -1,0 +1,30 @@
+# The indexer beside a Telos node on the same host.
+#
+#   cp .env.example .env    # set SHIP_URL and TELOS_RPC at the least
+#   docker compose up -d
+#   curl -s localhost:8899/api/bridge/health | jq .status
+#
+# `network_mode: host` because the node's state-history socket and HTTP API are
+# on the host's loopback, and the stream is constant traffic best kept there.
+# With HOST=127.0.0.1 the API listens on loopback only; put a reverse proxy with
+# TLS in front of it (README, "Exposing it").
+
+services:
+  indexer:
+    build: .
+    image: alcor-bridge-indexer
+    container_name: alcor-bridge-indexer
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    # The frontier, the leaves, the proofs: everything the instance knows.
+    volumes:
+      - ./state:/data
+    # A process meant to run for a year writes a line per checkpoint and a
+    # progress line every thirty seconds. Docker's default json-file driver
+    # keeps all of it forever, on the same disk as the node.
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"

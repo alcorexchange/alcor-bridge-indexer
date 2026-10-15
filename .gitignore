@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.*
+!.env.example
+# The running instance: frontier, leaves, proofs.
+state/
+.DS_Store
