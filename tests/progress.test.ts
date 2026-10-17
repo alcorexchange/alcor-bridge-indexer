@@ -25,6 +25,7 @@ const ctx: ProgressContext = {
   isAntelope: (d) => d === WAX,
   depositEta: (d) => (d === WAX ? antelopeDepositEta(waxChain) : finality),
   withdrawalEta: (d) => (d === WAX ? antelopeWithdrawalEta(waxChain) : null),
+  hold: () => null,
 };
 
 const row = (over: Partial<TransferRow>): TransferRow => ({

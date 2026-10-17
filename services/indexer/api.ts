@@ -34,7 +34,8 @@ import type { SettlementFollower } from './savanna.ts';
 import type { EvmFollower } from './evm.ts';
 import type { BlockrootKeeper } from './blockroot.ts';
 import { rebranch, treeThrough } from './tree.ts';
-import { assetFor, buildFast, confirmationsLeft, fastVerdict, routeFor, routeLimits, warmListings, FastUnavailable } from './fast.ts';
+import { assetFor, buildFast, confirmationsLeft, fastVerdict, routeFor, routeLimits, routeRoom, warmListings, FastUnavailable } from './fast.ts';
+import { holdOf, isLarge, type HoldContext, type Outflow } from './holds.ts';
 import { transferProgress, type Progress, type ProgressContext } from './progress.ts';
 import { finalizerKeys } from './finalizerKeys.ts';
 import { memo } from './memo.ts';
@@ -143,6 +144,9 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
   // added a minute ago shows up here without a restart; that is all "picking up
   // a new token" amounts to.
   await warmListings(deps.cfg).catch(() => undefined);
+  // The vaults' daily limits, for a withdrawal waiting on one (`holds.ts`).
+  // Not awaited: a row renders with the last reading, shared for fifteen seconds.
+  status(deps).catch(() => undefined);
 
   // The prefix is served here rather than stripped by a proxy, so the path in a
   // log is the path in a browser. The bare root stays a liveness answer, because
@@ -409,6 +413,59 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
 
 // --- health and stats --------------------------------------------------------------
 
+/** A deposit held this long is an incident rather than a hiccup. */
+const HELD_ALARM_SECONDS = 3600;
+
+/** How far back a large withdrawal stays on `/health`. */
+const LARGE_WINDOW_SECONDS = 86_400;
+
+/**
+ * What `holds.ts` sees, for an operator: held deposits, deposits over a cap,
+ * withdrawals waiting on a daily limit, and large withdrawals of the last day.
+ * Worded like the rows themselves, since this page is public too.
+ */
+async function holdAlarms(deps: Deps): Promise<string[]> {
+  await Promise.all([warmListings(deps.cfg), status(deps).catch(() => undefined)]);
+  const ctx = holdContext(deps);
+  const shown = (row: TransferRow) => {
+    const asset = assetFor(row.token, row.domain);
+    const amount = asset && row.amount !== null ? humanAmount(row.amount, asset.precision, asset.symbol) : `${row.amount} units`;
+    return `#${row.ref} ${amount} ${row.direction === 'deposit' ? 'from' : 'to'} ${ctx.chainName(row.domain)}`;
+  };
+  const clock = (t: number) => new Date(t * 1000).toISOString().slice(11, 16) + ' UTC';
+
+  const alarms: string[] = [];
+  const list = (direction: 'deposit' | 'withdrawal', statuses: string[]) =>
+    statuses.flatMap((status) => deps.store.listTransfers({ direction, status, limit: 500 }));
+
+  const held = list('deposit', ['parked']).filter(
+    (r) => holdOf(r, ctx)?.flag === 'held' && ctx.now - (r.dst_time ?? r.src_time) >= HELD_ALARM_SECONDS,
+  );
+  if (held.length) {
+    alarms.push(`${held.length} deposit(s) held on Telos over an hour: ${held.slice(0, 5).map(shown).join(', ')}`);
+  }
+
+  for (const r of list('deposit', ['seen', 'provable'])) {
+    if (holdOf(r, ctx)?.flag === 'over-limit') alarms.push(`deposit ${shown(r)} is over its route's cap and will not be credited`);
+  }
+
+  for (const r of list('withdrawal', ['burned', 'provable'])) {
+    const hold = holdOf(r, ctx);
+    if (hold?.flag !== 'daily-limit') continue;
+    alarms.push(`withdrawal ${shown(r)} waits for the daily limit` + (hold.until ? ` until about ${clock(hold.until)}` : ''));
+  }
+
+  const since = ctx.now - LARGE_WINDOW_SECONDS;
+  for (const r of list('withdrawal', ['burned', 'provable', 'released'])) {
+    if (r.src_time < since) continue;
+    const route = routeRoom(r.token, r.domain);
+    if (!isLarge(r, route)) continue;
+    const share = Number((BigInt(r.amount!) * 100n) / route!.maxWithdrawal);
+    alarms.push(`large withdrawal ${shown(r)} at ${clock(r.src_time)}: ${share}% of the route's maximum`);
+  }
+  return alarms;
+}
+
 async function health(deps: Deps) {
   const { cfg, savanna, store } = deps;
   const s = savanna.snapshot();
@@ -501,6 +558,13 @@ async function health(deps: Deps) {
     }
   } catch (err) {
     alarms.push(`upkeep: ${(err as Error).message}`);
+  }
+
+  // Crossings something stopped, and withdrawals large enough to look at.
+  try {
+    alarms.push(...(await holdAlarms(deps)));
+  } catch (err) {
+    alarms.push(`holds: ${(err as Error).message}`);
   }
 
   // RAM the bridge's own rows are paid from. Out of it, every route stops.
@@ -990,6 +1054,8 @@ function decorate(deps: Deps, row: TransferRow): DecoratedTransfer {
     flags.push('stuck');
   }
   if (row.status === 'expired') flags.push('rolled-back');
+  const hold = holdOf(row, holdContext(deps));
+  if (hold) flags.push(hold.flag);
 
   let track: 'light' | 'hard' | null = null;
   if (hasProof && row.direction === 'withdrawal') {
@@ -1048,6 +1114,39 @@ function progressContext(deps: Deps): ProgressContext {
       if (!far) return null;
       return far.kind === 'antelope' ? antelopeWithdrawalEta(far.chain) : withdrawalEta(far.chain);
     },
+    hold: (row) => holdOf(row, holdContext(deps)),
+  };
+}
+
+/**
+ * Each EVM vault's daily outflow per token, as the last `/v1/chains` read it:
+ * keyed `<chain id>:<token>`, null for a token with no limit. A row renders
+ * synchronously, so it reads what is known rather than waiting on a vault.
+ */
+const outflows = new Map<string, Outflow | null>();
+
+const bareToken = (token: string) => token.replace(/^0x/, '').toLowerCase();
+
+function rememberOutflows(sources: { chainId?: number | string; routes?: any[] }[]): void {
+  for (const source of sources) {
+    if (source.chainId === undefined) continue;
+    for (const r of source.routes ?? []) {
+      if (r.outflowError || r.outflowLeft === undefined || !r.token) continue;
+      outflows.set(
+        `${source.chainId}:${bareToken(r.token)}`,
+        r.outflowLeft === null ? null : { left: BigInt(r.outflowLeft), perDay: BigInt(r.outflowPerDay) },
+      );
+    }
+  }
+}
+
+/** What `holds.ts` reads a row against: the ledger's routes and the vaults' daily limits. */
+function holdContext(deps: Deps): HoldContext {
+  return {
+    now: Math.floor(Date.now() / 1000),
+    route: routeRoom,
+    outflow: (token, domain) => (token && domain !== null ? outflows.get(`${domain}:${bareToken(token)}`) : undefined),
+    chainName: (domain) => chainOfDomain(deps.cfg, domain)?.chain.name ?? 'the far chain',
   };
 }
 
@@ -1146,7 +1245,11 @@ let statusMemo: (() => Promise<Awaited<ReturnType<typeof chainsStatus>>>) | unde
 function status(deps: Deps) {
   statusMemo ??= memo(
     ({ sources }) => (allRead(sources as any[]) ? 15_000 : RETRY_PARTIAL_MS),
-    () => chainsStatus(deps.cfg, { ...deps.savanna.state }, deps.keepers),
+    async () => {
+      const read = await chainsStatus(deps.cfg, { ...deps.savanna.state }, deps.keepers);
+      rememberOutflows(read.sources as any[]);
+      return read;
+    },
   );
   return statusMemo();
 }

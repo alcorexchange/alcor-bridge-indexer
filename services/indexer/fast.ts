@@ -33,6 +33,7 @@
  */
 
 import type { IndexerConfig } from './config.ts';
+import type { RouteRoom } from './holds.ts';
 
 import { BEACON_GENESIS_TIME } from '../../src/config.ts';
 import { humanEta } from '../../src/chains/eta.ts';
@@ -61,15 +62,16 @@ export type RouteLimits = {
  * which is the whole of what "picking up a new token" requires. Nothing is
  * compiled in and nothing is restarted.
  */
-let listingCache: { at: number; routes: any[]; assets: any[] } | null = null;
+let listingCache: { at: number; routes: any[]; assets: any[]; spokes: Set<string> } | null = null;
 
 async function listings(cfg: IndexerConfig) {
   if (!listingCache || Date.now() - listingCache.at > 60_000) {
-    const [routes, assets] = await Promise.all([
+    const [routes, assets, spokes] = await Promise.all([
       getTableRows(cfg.savanna, { code: cfg.savanna.accounts.bridge, table: 'routes' }),
       getTableRows(cfg.savanna, { code: cfg.savanna.accounts.bridge, table: 'assets' }),
+      getTableRows<{ route_id: number | string }>(cfg.savanna, { code: cfg.savanna.accounts.bridge, table: 'spokes' }),
     ]);
-    listingCache = { at: Date.now(), routes, assets };
+    listingCache = { at: Date.now(), routes, assets, spokes: new Set(spokes.map((r) => String(r.route_id))) };
   }
   return listingCache;
 }
@@ -133,6 +135,19 @@ export function routeLimits(extToken: string | null, domain: string | null): Rou
     optimisticMax: BigInt(row.optimistic_max),
     minConfirmations: Number(row.min_confirmations),
     depositsOpen: Boolean(row.deposits_open),
+  };
+}
+
+/** What a route allows right now (see `holds.ts`), from the listings already loaded. */
+export function routeRoom(extToken: string | null, domain: string | null): RouteRoom | undefined {
+  if (!extToken || domain === null) return undefined;
+  const row = routeRow(extToken, domain);
+  if (!row) return undefined;
+  return {
+    cap: BigInt(row.cap),
+    backing: BigInt(row.backing),
+    maxWithdrawal: BigInt(row.max_withdrawal),
+    spoke: listingCache!.spokes.has(String(row.id)),
   };
 }
 

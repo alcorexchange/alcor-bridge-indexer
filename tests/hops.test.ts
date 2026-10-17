@@ -122,6 +122,7 @@ const ctx: ProgressContext = {
   isAntelope: (d) => d === WAX,
   depositEta: (d) => (d === WAX ? antelopeDepositEta(waxChain) : null),
   withdrawalEta: (d) => (d === WAX ? antelopeWithdrawalEta(waxChain) : null),
+  hold: () => null,
 };
 
 test('a journey goes arriving, sending, delivered', () => {

@@ -372,16 +372,18 @@
     "address": "0x0000000000000000000000000000000000000000"
    },
    "amountHuman": "0.03 ETH",
-   "flags": [],
+   "flags": [
+    "daily-limit"
+   ],
    "hasProof": true,
    "track": "light",
    "secondsToDeadline": 86400,
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "burned on Telos; freezing its proof",
+    "stage": "waiting: Ethereum is not paying this token out right now",
     "percent": 25,
-    "etaSeconds": 5,
+    "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
    }
@@ -420,18 +422,20 @@
     "address": "0x0000000000000000000000000000000000000000"
    },
    "amountHuman": "0.03 ETH",
-   "flags": [],
+   "flags": [
+    "daily-limit"
+   ],
    "hasProof": true,
    "track": "light",
    "secondsToDeadline": 86400,
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "ready: release it on Ethereum",
+    "stage": "waiting: Ethereum is not paying this token out right now",
     "percent": 50,
     "etaSeconds": null,
-    "exact": true,
-    "waitingOn": "user"
+    "exact": false,
+    "waitingOn": "bridge"
    }
   }
  },
@@ -704,16 +708,18 @@
     "address": "0x0000000000000000000000000000000000000000"
    },
    "amountHuman": "0.03 ETH",
-   "flags": [],
+   "flags": [
+    "daily-limit"
+   ],
    "hasProof": true,
    "track": "hard",
    "secondsToDeadline": 86400,
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "burned on Telos; freezing its proof",
+    "stage": "waiting: Ethereum is not paying this token out right now",
     "percent": 25,
-    "etaSeconds": 5,
+    "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
    }
@@ -1950,6 +1956,10 @@
     "bsc: no handover stored for generation 1; the indexer builds one a few seconds after publication, and once state-history has pruned it only the policy admin's setPolicy can move the light client past it",
     "polygon light client holds generation 0, Telos is on 185",
     "polygon: no handover stored for generation 1; the indexer builds one a few seconds after publication, and once state-history has pruned it only the policy admin's setPolicy can move the light client past it",
+    "withdrawal #16 0.03 ETH to Ethereum waits for the daily limit",
+    "withdrawal #8 0.03 ETH to Ethereum waits for the daily limit",
+    "withdrawal #9 0.03 ETH to Ethereum waits for the daily limit",
+    "large withdrawal #13 20 WAX to WAX at 07:59 UTC: 20000% of the route's maximum",
     "ram: http://telos.test/v1/chain/get_account -> HTTP 400"
    ],
    "savanna": {

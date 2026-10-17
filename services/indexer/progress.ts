@@ -15,6 +15,7 @@
 import type { Eta } from '../../src/chains/eta.ts';
 import { fastVerdict, type RouteLimits } from './fast.ts';
 import type { TransferRow } from './db.ts';
+import type { Hold } from './holds.ts';
 
 export type Progress = {
   /** What is happening now, in words. */
@@ -39,6 +40,8 @@ export type ProgressContext = {
   isAntelope: (domain: string | null) => boolean;
   depositEta: (domain: string) => Eta | null;
   withdrawalEta: (domain: string) => Eta | null;
+  /** What stops this row, if anything does (see `holds.ts`). */
+  hold: (row: TransferRow) => Hold | null;
 };
 
 /** An Ethereum block, and what a push to Telos takes once a proof exists. */
@@ -65,7 +68,17 @@ function byTime(stage: string, since: number, eta: Eta, now: number, cap = 95): 
 
 export function transferProgress(row: TransferRow, ctx: ProgressContext): Progress {
   const chain = ctx.chainName(row.domain);
-  return row.direction === 'deposit' ? depositProgress(row, chain, ctx) : withdrawalProgress(row, chain, ctx);
+  const progress = row.direction === 'deposit' ? depositProgress(row, chain, ctx) : withdrawalProgress(row, chain, ctx);
+  // A stopped step keeps how far it got, and says what it waits on instead of an estimate.
+  const hold = ctx.hold(row);
+  if (!hold) return progress;
+  return {
+    stage: hold.stage,
+    percent: progress.percent,
+    etaSeconds: hold.until === null ? null : Math.max(0, hold.until - ctx.now),
+    exact: false,
+    waitingOn: 'bridge',
+  };
 }
 
 function depositProgress(row: TransferRow, chain: string, ctx: ProgressContext): Progress {

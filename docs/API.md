@@ -85,6 +85,14 @@ Computed per request, because they are functions of the clock. Render these:
 | `past-deadline` | `release` is refused from here on; `expire` is what unlocks the refund |
 | `stuck` | proved and uncredited for over half an hour |
 | `rolled-back` | voided on the far side; the refund is what is outstanding |
+| `held` | a parked deposit still not handed on after ten minutes. The funds are on Telos and someone has to look |
+| `over-limit` | a deposit larger than its route's cap leaves room for. Telos will not credit it as things stand |
+| `daily-limit` | a withdrawal larger than what the vault still lets out today. It waits for the limit to refill |
+
+A held, over-limit or daily-limit crossing also has its `progress` say so:
+`stage` is the reason in words, `waitingOn` is `bridge`, and `etaSeconds` is
+when the daily limit fits it, or null when nothing can tell. Show the stage
+as written. The words are deliberately the same whatever the cause.
 
 ### `track`
 
@@ -357,6 +365,14 @@ matches the build that serves it.
 Both followers, lag, alarms, storage, recent incidents. `status` is
 `following` | `catching-up` | `degraded`; `alarms` is a list of sentences meant
 to be shown to a human as they are.
+
+Besides the infrastructure, `alarms` names the crossings an operator should
+look at:
+- deposits held on Telos for over an hour;
+- deposits over their route's cap;
+- withdrawals waiting on a vault's daily limit;
+- every withdrawal of the last 24 hours that took at least half of its route's
+  `maxWithdrawal`.
 
 ```json
 {
