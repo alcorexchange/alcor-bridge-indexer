@@ -29,6 +29,7 @@ import { EvmFollower } from './evm.ts';
 import { resolveRootBlocks } from './roots.ts';
 import { BlockrootKeeper } from './blockroot.ts';
 import { ingestCrossings } from './crossings.ts';
+import { followSuiVault } from './suiVault.ts';
 import { crossingsFiles } from '../../src/chains/antelope.ts';
 import { backfillFromHistory } from './history.ts';
 import { createApi } from './api.ts';
@@ -199,6 +200,22 @@ if (cfg.relayerDir && cfg.antelope.length) {
         console.log(`[crossings] ${(err as Error).message}`);
       }
       await sleep(cfg.crossingsMs);
+    }
+  })();
+}
+
+/** Sui: the vault's events, for the Sui half of each crossing (services/indexer/suiVault.ts). */
+for (const sui of cfg.sui) {
+  void (async function suiLoop() {
+    while (!stopping) {
+      try {
+        const n = await followSuiVault(cfg, store, sui);
+        if (n) console.log(`[sui] ${n} vault event(s)`);
+      } catch (err) {
+        store.incident('sui', (err as Error).message);
+        console.log(`[sui] ${(err as Error).message}`);
+      }
+      await sleep(cfg.swapsMs);
     }
   })();
 }
