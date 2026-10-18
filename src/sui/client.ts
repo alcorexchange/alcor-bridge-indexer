@@ -120,7 +120,7 @@ const U64_MAX = 2n ** 64n - 1n;
 const PERIOD_MS = 86_400_000n;
 
 /** The vault's daily allowance left for `a` at `nowMs`, canonical units, refilled as `vault::spend` does; null when unmetered. */
-export function outflowLeftNow(a: VaultAsset, nowMs: number): bigint | null {
+export function outflowLeftNow(a: Pick<VaultAsset, 'perPeriod' | 'available' | 'updatedMs'>, nowMs: number): bigint | null {
   if (a.perPeriod === U64_MAX) return null;
   const topped = a.available + (a.perPeriod * BigInt(Math.max(0, nowMs - a.updatedMs))) / PERIOD_MS;
   return topped > a.perPeriod ? a.perPeriod : topped;

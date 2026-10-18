@@ -19,6 +19,7 @@
 
 import type { EvmChain } from './evm.ts';
 import type { AntelopeChain, Span } from './antelope.ts';
+import type { NearChain } from './near.ts';
 import type { SuiChain } from './sui.ts';
 
 const add = (...spans: Span[]): Span =>
@@ -236,6 +237,28 @@ export function suiDepositEta(chain: SuiChain): Eta {
 
 /** Telos → Sui: the burn finalized, then the recipient's own release. */
 export function suiWithdrawalEta(chain: SuiChain): Eta {
+  return eta(
+    [
+      { what: 'Telos finalizes the burn', span: chain.withdrawal.finalize },
+      { what: `the wallet releases it on ${chain.name}`, span: chain.withdrawal.release },
+    ],
+    false,
+  );
+}
+
+/** NEAR → Telos: the block final, then the relayer's head and proof on Telos. */
+export function nearDepositEta(chain: NearChain): Eta {
+  return eta(
+    [
+      { what: `${chain.name} finalizes the block`, span: chain.deposit.final },
+      { what: 'the relayer proves it on Telos', span: chain.deposit.prove },
+    ],
+    false,
+  );
+}
+
+/** Telos → NEAR: the burn finalized, then the recipient's own release. */
+export function nearWithdrawalEta(chain: NearChain): Eta {
   return eta(
     [
       { what: 'Telos finalizes the burn', span: chain.withdrawal.finalize },

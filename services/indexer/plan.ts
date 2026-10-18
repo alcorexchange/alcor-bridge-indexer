@@ -226,8 +226,8 @@ class Network {
   }
 
   chain(id: string): PlanChain | undefined {
-    // Sui is a direct route to Telos only; no swap or hop is planned through it yet.
-    return id === SETTLEMENT_CHAIN ? TELOS : this.ctx.chains.find((c) => c.id === id && c.kind !== 'sui');
+    // Sui and NEAR are direct routes to Telos only; no swap or hop is planned through them yet.
+    return id === SETTLEMENT_CHAIN ? TELOS : this.ctx.chains.find((c) => c.id === id && c.kind !== 'sui' && c.kind !== 'near');
   }
 
   /** The route between Telos and a chain, or between two chains through Telos (a hop's row). */

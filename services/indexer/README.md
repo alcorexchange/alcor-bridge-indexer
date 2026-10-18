@@ -251,6 +251,8 @@ process's own knobs live in the environment.
 | `WAX_HISTORY`, `XPR_HISTORY`, `VAULTA_HISTORY` | `https://wax.eosusa.io`, `https://proton.eosusa.io`, `https://eos.eosusa.io,https://eos.hyperion.eosrio.io` | each chain's Hyperion, to complete a row whose far transaction the relayers did not record |
 | `VAULTA_RPC` | unset | Vaulta's HTTP API; setting it turns Vaulta on (no keeper, no state-history: its relayers prove everything) |
 | `SUI_GRAPHQL` | unset | Sui's GraphQL endpoints, comma-separated; setting it turns Sui on in `/v1/chains`, its withdrawals' Move calls in `/v1/proofs` and `suiCalls` in `/v1/handovers` |
+| `NEAR_RPC`, `NEAR_TESTNET_RPC` | unset | NEAR's JSON-RPC endpoints, comma-separated, per network; setting one turns that network on in `/v1/chains`, its withdrawals' function calls in `/v1/proofs`, `nearCalls` in `/v1/handovers`, and the follower of the vault's logs |
+| `NEAR_TX_API`, `NEAR_TESTNET_TX_API` | `https://tx.main.fastnear.com`, `https://tx.test.fastnear.com` | FastNEAR's account history, which only finds the vault's transactions; what they say is read from the RPC |
 
 ## Tests
 

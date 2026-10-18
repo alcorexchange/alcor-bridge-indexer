@@ -239,6 +239,8 @@ type ChainRoute = {
   antelopeToken?: { contract: string; symbol: string; precision: number };
   /** On Sui: the coin type to deposit. */
   coinType?: string;
+  /** On NEAR: the NEP-141 contract to `ft_transfer_call`, or NEAR for `deposit_near`. */
+  nearToken?: string;
 };
 
 type ChainEntry = {
@@ -315,6 +317,8 @@ function openness(reasons: (string | null)[], max: string | null) {
 const isAntelope = (c: ChainEntry) => c.kind === 'antelope';
 /** Sui crosses to and from Telos only: hop.alcor predates its 32-byte addresses. */
 const isSui = (c: ChainEntry) => c.kind === 'sui';
+/** NEAR likewise: its accounts are 32-byte hashes on Telos. */
+const isNear = (c: ChainEntry) => c.kind === 'near';
 const domainOf = (c: ChainEntry) => String(c.domain ?? c.chainId);
 const recipientHint = (c: ChainEntry) => (isAntelope(c) ? '<account>' : '0x<address>');
 
@@ -352,7 +356,9 @@ export function routesBetween(
           ? { transfer: { contract: r.antelopeToken?.contract ?? null, memo: r.depositMemo ?? '<telos account>' } }
           : isSui(a)
             ? { deposit: { coinType: r.coinType ?? null, telosTo: '<telos account>' } }
-            : { deposit: { token: r.token ?? null, telosTo: '<telos account>' } },
+            : isNear(a)
+              ? { deposit: { nearToken: r.nearToken ?? null, telosTo: '<telos account>' } }
+              : { deposit: { token: r.token ?? null, telosTo: '<telos account>' } },
       });
       out.push({
         symbol: r.symbol,
@@ -367,7 +373,7 @@ export function routesBetween(
       });
 
       for (const b of chains) {
-        if (b === a || isSui(a) || isSui(b)) continue;
+        if (b === a || isSui(a) || isSui(b) || isNear(a) || isNear(b)) continue;
         const onward = b.routes?.find((x) => x.symbol === r.symbol);
         if (!onward) continue;
         const reasons: (string | null)[] = [];

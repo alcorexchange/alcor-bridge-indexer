@@ -19,7 +19,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { EVM_CHAINS } from '../../src/chains/evm.ts';
-import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, humanEta, suiDepositEta, suiWithdrawalEta, withdrawalEta } from '../../src/chains/eta.ts';
+import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, humanEta, nearDepositEta, nearWithdrawalEta, suiDepositEta, suiWithdrawalEta, withdrawalEta } from '../../src/chains/eta.ts';
+import { isTrusted, knowsKey, nearVaultState } from '../../src/near/client.ts';
+import { handoverCalls, settleCalls as nearSettleCalls } from '../../src/near/withdrawal.ts';
+import { fetchRegistrations, type Registration } from '../../src/savanna/registrations.ts';
+import { TELOS_HISTORY } from '../../src/config.ts';
+import { nearAccountKey, nearRouteOf } from './nearVault.ts';
 import { clientState, vaultState, type VaultState } from '../../src/sui/client.ts';
 import { installPolicyCall, settleCall, submitRootCall } from '../../src/sui/withdrawal.ts';
 import { antelopeById } from '../../src/chains/antelope.ts';
@@ -802,7 +807,7 @@ async function pending(
     // A deposit from an Antelope chain is proved by that chain's relayer, not
     // pushed from here: there is no proof to offer, no fast path and no
     // ancestry deadline — only how far its producers have got.
-    if (r.direction === 'deposit' && (far?.kind === 'antelope' || far?.kind === 'sui')) {
+    if (r.direction === 'deposit' && (far?.kind === 'antelope' || far?.kind === 'sui' || far?.kind === 'near')) {
       out.push({
         key: r.key,
         direction: 'deposit',
@@ -875,14 +880,16 @@ async function pending(
 
     // Rolled back on the far side: what is outstanding is the refund at home,
     // and it needs the vault's `Voided` log proved on the settlement chain.
-    if (r.status === 'expired' && far?.kind === 'sui') {
+    if (r.status === 'expired' && (far?.kind === 'sui' || far?.kind === 'near')) {
       out.push({
         key: voidKey(r.ref),
         direction: 'withdrawal-rollback',
         action: `reissued by the ${far.chain.name} relayer`,
         pushOn: SETTLEMENT_CHAIN,
         ready: false,
-        reason: 'expired on Sui; the relayer proves the Voided event and the burned amount is reissued',
+        reason: far.kind === 'sui'
+          ? 'expired on Sui; the relayer proves the Voided event and the burned amount is reissued'
+          : `expired on ${far.chain.name}; the relayer proves the voided log and the burned amount is reissued`,
         proof: null,
         ...transfer,
       });
@@ -914,7 +921,9 @@ async function pending(
       direction: pastDeadline ? 'withdrawal-expire' : 'withdrawal',
       action: far?.kind === 'sui'
         ? (pastDeadline ? 'submit_root_entry + expire_entry' : 'submit_root_entry + release_entry')
-        : pastDeadline
+        : far?.kind === 'near'
+          ? (pastDeadline ? 'submit_root + expire' : 'submit_root + release')
+          : pastDeadline
           ? 'expire'
           : d.track === 'light'
             ? 'release (~135k gas)'
@@ -1094,7 +1103,7 @@ function decorate(deps: Deps, row: TransferRow): DecoratedTransfer {
         precision: listed.precision,
         ...(far?.kind === 'antelope'
           ? { contract: antelopeToken(row.token ?? '')?.contract }
-          : far?.kind === 'sui'
+          : far?.kind === 'sui' || far?.kind === 'near'
             ? { token: row.token ?? undefined }
             : { address: row.token ?? undefined }),
       }
@@ -1126,18 +1135,20 @@ function progressContext(deps: Deps): ProgressContext {
     evmHead: (domain) => followerOf(deps, domain)?.state.head || undefined,
     route: routeLimits,
     chainName: (domain) => of(domain)?.chain.name ?? 'the far chain',
-    // A Sui deposit, like an Antelope one, is proved by its relayer.
-    isAntelope: (domain) => of(domain)?.kind === 'antelope' || of(domain)?.kind === 'sui',
+    // A Sui or NEAR deposit, like an Antelope one, is proved by its relayer.
+    isAntelope: (domain) => ['antelope', 'sui', 'near'].includes(of(domain)?.kind ?? ''),
     depositEta: (domain) => {
       const far = of(domain);
       if (!far) return null;
       if (far.kind === 'sui') return suiDepositEta(far.chain);
+      if (far.kind === 'near') return nearDepositEta(far.chain);
       return far.kind === 'antelope' ? antelopeDepositEta(far.chain) : depositEta(far.chain);
     },
     withdrawalEta: (domain) => {
       const far = of(domain);
       if (!far) return null;
       if (far.kind === 'sui') return suiWithdrawalEta(far.chain);
+      if (far.kind === 'near') return nearWithdrawalEta(far.chain);
       return far.kind === 'antelope' ? antelopeWithdrawalEta(far.chain) : withdrawalEta(far.chain);
     },
     hold: (row) => holdOf(row, holdContext(deps)),
@@ -1346,7 +1357,9 @@ async function proof(deps: Deps, key: string): Promise<Answer> {
   if (stored.kind === 'withdrawal') {
     const artifact = JSON.parse(stored.body);
     const far = chainOfDomain(deps.cfg, row.domain);
-    return far?.kind === 'sui' ? suiWithdrawalProof(deps, row, artifact) : withdrawalProof(deps, row, artifact);
+    if (far?.kind === 'sui') return suiWithdrawalProof(deps, row, artifact);
+    if (far?.kind === 'near') return nearWithdrawalProof(deps, row, artifact);
+    return withdrawalProof(deps, row, artifact);
   }
 
   const kind = stored.kind as SettledKind;
@@ -1648,10 +1661,13 @@ async function handovers(deps: Deps, after: number, limit: number) {
   const sui = deps.cfg.sui?.length
     ? ((await status(deps)).sources as any[]).find((x) => x.kind === 'sui')?.contracts
     : undefined;
+  // And on one that shows NEAR, as the two function calls on the vault (which holds its Telos client).
+  const nearVault = await firstNearVault(deps);
   const rows = deps.store.handoversAfter(after, limit).map((h) => {
     const body = JSON.parse(h.body);
     return {
       ...body,
+      ...(nearVault ? { nearCalls: handoverCalls(nearVault, body.submitRoot) } : {}),
       ...(sui?.package && sui.telosClient
         ? {
             suiCalls: [
@@ -1663,6 +1679,104 @@ async function handovers(deps: Deps, after: number, limit: number) {
     };
   });
   return { handovers: rows, count: rows.length };
+}
+
+/** The vault of the first NEAR chain this instance shows that the ledger routes to. */
+async function firstNearVault(deps: Deps): Promise<string | undefined> {
+  for (const near of deps.cfg.near ?? []) {
+    const route = await nearRouteOf(deps.cfg, near.chain.domain).catch(() => undefined);
+    if (route) return route.vault;
+  }
+  return undefined;
+}
+
+/**
+ * Every key Telos ever registered, with its proof of possession, read from
+ * history at most every ten minutes: a key new to Telos arrives about once a day.
+ */
+let registrations: { at: number; list: Promise<Registration[]> } | undefined;
+function registrationsSoon(): Promise<Registration[]> {
+  if (registrations && Date.now() - registrations.at < 600_000) return registrations.list;
+  const list = fetchRegistrations(TELOS_HISTORY);
+  list.catch(() => { registrations = undefined; });
+  registrations = { at: Date.now(), list };
+  return list;
+}
+
+/**
+ * A withdrawal's settlement on NEAR, as the function calls a wallet sends to the
+ * vault, in order (`near.calls`): `register_key` for each signer key the vault's
+ * Telos client does not know yet (with its proof of possession from Telos's
+ * `regfinkey` history), `submit_root` unless the root is already trusted, then
+ * `release` before the deadline or `expire` after it.
+ *
+ * `release` names the recipient's account id, whose sha256 the withdrawal
+ * carries. The indexer knows it when the vault's logs named that account (a
+ * depositor, a refund address, an earlier recipient); otherwise `recipient` is
+ * null in the call and the wallet puts in its own account id, which the vault
+ * checks against `recipientAddress`.
+ *
+ * When the client seats an older generation than the one that signed, `catchUp`
+ * names the handovers to walk first (`nearCalls` in `/v1/handovers`). A signer
+ * key no history holds is listed in `unknownSigners`; the walk teaches it.
+ */
+async function nearWithdrawalProof(deps: Deps, row: TransferRow, artifact: WithdrawalArtifact): Promise<Answer> {
+  const near = (deps.cfg.near ?? []).find((n) => n.chain.domain === String(row.domain));
+  if (!near) return { code: 404, body: { error: 'this instance has no endpoint for that NEAR network (NEAR_RPC / NEAR_TESTNET_RPC)' } };
+  const route = await nearRouteOf(deps.cfg, near.chain.domain);
+  if (!route) return { code: 404, body: { error: `the ledger has no route to ${near.chain.name}` } };
+  const vault = await nearVaultState(near.rpc, route.vault);
+  const release = artifact.release as any;
+  const token = String(release.token).replace(/^0x/, '').toLowerCase();
+  const asset = vault.assets.find((a) => a.token === token);
+  if (!asset) return { code: 404, body: { error: `the vault ${route.vault} lists no token with address ${token}` } };
+  const recipientAddress = String(release.recipient).replace(/^0x/, '').toLowerCase();
+  const recipient = deps.store.getMeta(nearAccountKey(recipientAddress)) ?? null;
+
+  const root = frozenSubmitRoot(artifact.submitRoot);
+  const signing = Number(root.finality.activeGeneration);
+  // The signers: the keys of the signing policy whose bit is set, by keccak id.
+  const bits = Buffer.from(root.bits.replace(/^0x/, ''), 'hex');
+  const signers = new Set(root.policyKeys
+    .filter((_, i) => (bits[i >> 3] >> (i & 7)) & 1)
+    .map((k) => k.replace(/^0x/, '').toLowerCase()));
+  const known = (await registrationsSoon()).filter((r) => signers.has(r.keyId.replace(/^0x/, '').toLowerCase()));
+  const knows = await Promise.all(known.map((r) => knowsKey(near.rpc, route.vault, Buffer.from(r.raw).toString('hex'))));
+  const learn = known.filter((_, i) => !knows[i]);
+  const unknownSigners = [...signers].filter((id) => !known.some((r) => r.keyId.replace(/^0x/, '').toLowerCase() === id));
+  const trusted = await isTrusted(near.rpc, route.vault, root.finality.finalityMroot);
+  const pastDeadline = row.deadline !== null && row.deadline <= Math.floor(Date.now() / 1000);
+
+  return {
+    code: 200,
+    body: {
+      key: row.key,
+      direction: 'withdrawal',
+      chain: near.chain.id,
+      burnBlock: artifact.burnBlock,
+      rootBlock: artifact.rootBlock,
+      vault: artifact.vault,
+      status: row.status,
+      deadline: row.deadline,
+      near: {
+        network: near.chain.network,
+        vault: route.vault,
+        token: asset.tokenId,
+        recipient,
+        recipientAddress,
+        signingGeneration: signing,
+        seatedGeneration: vault.client.generation,
+        catchUp: vault.client.generation < signing ? `/v1/handovers?after=${vault.client.generation}` : null,
+        unknownSigners,
+        rootTrusted: trusted,
+        action: pastDeadline ? 'expire' : 'release',
+        calls: nearSettleCalls({
+          vault: route.vault, artifact, submitRoot: root, learn, trusted,
+          token: asset.tokenId, recipient, pastDeadline,
+        }),
+      },
+    },
+  };
 }
 
 /** The cheapest root to fold a burn into: the oldest at or after it that the withdrawal's own chain trusts. */
@@ -1775,7 +1889,13 @@ function ancestryDeadline(cfg: IndexerConfig, row: TransferRow): number | undefi
  */
 function proofWait(deps: Deps, row: TransferRow): string {
   const source = chainOfDomain(deps.cfg, row.domain);
-  const eta = source?.kind === 'evm' ? depositEta(source.chain) : source?.kind === 'sui' ? suiDepositEta(source.chain) : null;
+  const eta = source?.kind === 'evm'
+    ? depositEta(source.chain)
+    : source?.kind === 'sui'
+      ? suiDepositEta(source.chain)
+      : source?.kind === 'near'
+        ? nearDepositEta(source.chain)
+        : null;
   return eta?.human ?? 'a wait this chain has no measured figure for';
 }
 

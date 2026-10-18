@@ -16,7 +16,8 @@
  */
 
 import type { EvmChain } from '../../src/chains/evm.ts';
-import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, suiDepositEta, suiWithdrawalEta, withdrawalEta, type Eta } from '../../src/chains/eta.ts';
+import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, nearDepositEta, nearWithdrawalEta, suiDepositEta, suiWithdrawalEta, withdrawalEta, type Eta } from '../../src/chains/eta.ts';
+import { NEAR_ACCOUNT } from '../../src/chains/near.ts';
 import { antelopeVaults } from '../../src/chains/antelope.ts';
 import { HOP_MEMO, antelopeSwapsView, evmSwapsView } from '../../src/chains/swaps.ts';
 import { hexToName } from '../../src/proof/pack.ts';
@@ -24,7 +25,10 @@ import type { BlockrootKeeper } from './blockroot.ts';
 import { assetOfRoute } from './fast.ts';
 import { execFor, selector, type Exec } from '../../src/evm/exec.ts';
 import { antelopeRpc, getTableRows } from '../../src/net/antelope.ts';
-import { SETTLEMENT_CHAIN, type AntelopeConfig, type IndexerConfig, type SuiConfig } from './config.ts';
+import { SETTLEMENT_CHAIN, type AntelopeConfig, type IndexerConfig, type NearConfig, type SuiConfig } from './config.ts';
+import { nearVaultState } from '../../src/near/client.ts';
+import { nearRpc } from '../../src/near/rpc.ts';
+import { nearRouteOf } from './nearVault.ts';
 import { outflowLeftNow, vaultState } from '../../src/sui/client.ts';
 import { suiGraphql } from '../../src/sui/proof.ts';
 import { epochBacklog } from './parlia.ts';
@@ -477,6 +481,13 @@ export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<stri
     error: (err as Error).message,
     routes: [],
   }))));
+  const nearSources = await Promise.all((cfg.near ?? []).map((c) => nearStatus(cfg, ledger, c).catch((err) => ({
+    id: c.chain.id,
+    name: c.chain.name,
+    kind: 'near',
+    error: (err as Error).message,
+    routes: [],
+  }))));
   return {
     settlement: {
       id: SETTLEMENT_CHAIN,
@@ -488,7 +499,7 @@ export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<stri
       ...savannaState,
       note: 'one state-history stream and one finality tree serve every source chain',
     },
-    sources: [...sources, ...antelopeSources, ...suiSources],
+    sources: [...sources, ...antelopeSources, ...suiSources, ...nearSources],
   };
 }
 
@@ -778,6 +789,100 @@ async function suiStatus(cfg: IndexerConfig, ledger: Ledger, sui: SuiConfig) {
     lightClient: { account: lightClient, contract: null },
     gateway,
     contracts: { vault: vaultId, package: vault.package, telosClient: vault.telosClient },
+    active: {
+      deposits: !vault.depositsPaused && routes.some((r: any) => r.deposits && r.vaultEnabled),
+      withdrawals: !vault.withdrawalsPaused && routes.some((r: any) => r.withdrawals),
+      reason: vault.depositsPaused || vault.withdrawalsPaused
+        ? `the vault is paused (deposits ${vault.depositsPaused}, withdrawals ${vault.withdrawalsPaused})`
+        : 'open',
+    } as ChainStatus['active'],
+    routes,
+  };
+}
+
+/**
+ * NEAR: the ledger's routes to it, joined with the vault read through its view
+ * methods. Deposits are proved by the NEAR relayer; a withdrawal is released by
+ * the recipient's wallet with `/v1/proofs/w:<id>` (function calls on the vault).
+ * The vault's cap, daily allowance and minimum are in canonical units; what it
+ * holds is raw, `scale` to a canonical unit.
+ */
+async function nearStatus(cfg: IndexerConfig, ledger: Ledger, near: NearConfig) {
+  const chain = near.chain;
+  const base = {
+    id: chain.id,
+    name: chain.name,
+    kind: 'near' as const,
+    network: chain.network,
+    chainId: chain.chainId,
+    domain: chain.domain,
+    /** Heads approved by more than 2/3 of the epoch's block-producer stake (ed25519). */
+    strategy: 'approvals',
+    head: null as number | null,
+    provedTop: null as ProvedTop,
+    behind: null as number | null,
+    lightClient: { account: null as string | null, contract: null as string | null },
+    gateway: null as string | null,
+    /** The vault holds the Telos light client too: one account. */
+    contracts: { vault: null as string | null, vaultAddress: null as string | null, telosClient: null as string | null },
+    upkeep: null as Record<string, unknown> | null,
+    deposits: { supported: true },
+    timing: { deposit: nearDepositEta(chain), withdrawal: nearWithdrawalEta(chain) },
+    active: { deposits: false, withdrawals: false, reason: `no route to ${chain.name} on the ledger` } as ChainStatus['active'],
+    routes: [] as unknown[],
+    /** A NEAR account id; on Telos it is `0x` and the 64 hex digits of its sha256. */
+    accountFormat: NEAR_ACCOUNT,
+    swaps: null,
+  };
+  const route = await nearRouteOf(cfg, chain.domain);
+  if (!route) return base;
+
+  const [vault, head, newest] = await Promise.all([
+    nearVaultState(near.rpc, route.vault),
+    nearRpc(near.rpc, 'block', { finality: 'final' }).then((b) => Number(b.header.height)),
+    antelopeRpc(cfg.savanna, '/v1/chain/get_table_rows', {
+      code: route.lightClient, scope: route.lightClient, table: 'heads', reverse: true, limit: 1, json: true,
+    }).then((r) => r?.rows?.[0]),
+  ]);
+  const top: ProvedTop = newest
+    ? { block: Number(newest.height), hash: String(newest.block_hash), at: String(newest.at), signers: Number(newest.signers) }
+    : null;
+
+  const now = Date.now();
+  const routes = routesOf(ledger, chain.domain, route.address).map((r) => {
+    // The route's ext_token is sha256 of the token's id; `routesOf` hands it over as `token`.
+    const a = vault.assets.find((x) => x.token === r.token?.replace(/^0x/, '').toLowerCase());
+    if (!a) return { ...r, token: null, outflowError: 'the vault does not list this token' };
+    const left = outflowLeftNow(a, now);
+    const held = a.held / a.scale;
+    const room = a.cap === 0n ? null : a.cap - held;
+    return {
+      ...r,
+      /** The NEP-141 contract to `ft_transfer_call` the vault on, or NEAR for `deposit_near`. */
+      token: null,
+      nearToken: a.tokenId,
+      /** The recipient on Telos is the sha256 of the NEAR account id (the vault's `address_of` view computes it). */
+      withdrawMemo: `${chain.domain}:0x<sha256 of the NEAR account id>`,
+      outflowPerDay: left === null ? null : a.perPeriod.toString(),
+      outflowLeft: left === null ? null : left.toString(),
+      withdrawableNow: withdrawableNow(r, left),
+      vaultCap: a.cap === 0n ? null : a.cap.toString(),
+      vaultHeld: held.toString(),
+      depositableNow: room === null ? null : (room < 0n ? 0n : room).toString(),
+      vaultEnabled: a.enabled,
+      vaultMinDeposit: a.minDeposit.toString(),
+    };
+  });
+  return {
+    ...base,
+    head,
+    provedTop: top,
+    behind: top ? head - top.block : null,
+    lightClient: { account: route.lightClient, contract: null },
+    gateway: route.gateway,
+    contracts: { vault: route.vault, vaultAddress: route.address, telosClient: route.vault },
+    /** The Telos client inside the vault: the finalizer generation it seats. */
+    telosClient: { generation: vault.client.generation, threshold: vault.client.threshold.toString() },
     active: {
       deposits: !vault.depositsPaused && routes.some((r: any) => r.deposits && r.vaultEnabled),
       withdrawals: !vault.withdrawalsPaused && routes.some((r: any) => r.withdrawals),

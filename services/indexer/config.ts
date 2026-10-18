@@ -29,6 +29,7 @@ import type { SavannaChain } from '../../src/chains/savanna.ts';
 import { EVM_CHAINS, type EvmChain, evmChain } from '../../src/chains/evm.ts';
 import { ANTELOPE_CHAINS, antelopeByDomain, enabledBy, type AntelopeChain } from '../../src/chains/antelope.ts';
 import { SUI_CHAINS, suiByDomain, type SuiChain } from '../../src/chains/sui.ts';
+import { NEAR_CHAINS, nearByDomain, type NearChain } from '../../src/chains/near.ts';
 import type { KeeperConfig } from './blockroot.ts';
 
 const num = (v: string | undefined, fallback: number) => (v === undefined ? fallback : Number(v));
@@ -52,6 +53,14 @@ export type Source = {
 /** An Antelope chain this instance follows, and where it reads it. */
 /** Sui, on when `SUI_GRAPHQL` names its GraphQL endpoints (comma-separated). */
 export type SuiConfig = { chain: SuiChain; graphql: string[] };
+
+/**
+ * NEAR, on when `<PREFIX>_RPC` names its JSON-RPC endpoints (comma-separated):
+ * `NEAR_RPC` for mainnet, `NEAR_TESTNET_RPC` for testnet. `<PREFIX>_TX_API` is
+ * FastNEAR's account-history API, which only finds the vault's transactions —
+ * what they say is read from the RPC.
+ */
+export type NearConfig = { chain: NearChain; rpc: string[]; txApi: string };
 
 export type AntelopeConfig = {
   chain: AntelopeChain;
@@ -187,6 +196,8 @@ export type IndexerConfig = {
   antelope: AntelopeConfig[];
   /** The Sui chains this instance shows (`<PREFIX>_GRAPHQL`); their deposits are the Sui relayer's. */
   sui: SuiConfig[];
+  /** The NEAR chains this instance shows (`<PREFIX>_RPC`); their deposits are the NEAR relayer's. */
+  near: NearConfig[];
   /** Where those chains' relayers append their crossings, when they run beside this process. */
   relayerDir?: string;
   /** How often those files are read: a stat and a short read, so every 200 ms. */
@@ -249,6 +260,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IndexerConfig 
     swapsMs: num(env.SWAPS_MS, 10_000),
     antelope: antelopeChains(env, dataDir),
     sui: suiChains(env),
+    near: nearChains(env),
   };
 }
 
@@ -256,6 +268,14 @@ export function suiChains(env: NodeJS.ProcessEnv): SuiConfig[] {
   return SUI_CHAINS.filter((c) => env[`${c.env}_GRAPHQL`]).map((c) => ({
     chain: c,
     graphql: env[`${c.env}_GRAPHQL`]!.split(',').map((s) => s.trim()).filter(Boolean),
+  }));
+}
+
+export function nearChains(env: NodeJS.ProcessEnv): NearConfig[] {
+  return NEAR_CHAINS.filter((c) => env[`${c.env}_RPC`]).map((c) => ({
+    chain: c,
+    rpc: env[`${c.env}_RPC`]!.split(',').map((s) => s.trim()).filter(Boolean),
+    txApi: (env[`${c.env}_TX_API`] ?? c.defaults.txApi).replace(/\/$/, ''),
   }));
 }
 
@@ -327,7 +347,7 @@ function sourceChains(): Source[] {
 
 /**
  * What a ledger domain names: an EVM chain this instance follows, with its
- * accounts and endpoints, or an Antelope chain or Sui from the registry. Undefined for
+ * accounts and endpoints, or an Antelope chain, Sui or NEAR from the registry. Undefined for
  * a domain that is neither — an EVM chain nobody here follows, or a malformed
  * one — which every caller has to answer for rather than guess at.
  *
@@ -335,7 +355,7 @@ function sourceChains(): Source[] {
  * the domain parses as a small number was spread over a dozen call sites, each
  * with its own idea of what null and an unfollowed chain meant.
  */
-export type Domain = ({ kind: 'evm' } & Source) | { kind: 'antelope'; chain: AntelopeChain } | { kind: 'sui'; chain: SuiChain };
+export type Domain = ({ kind: 'evm' } & Source) | { kind: 'antelope'; chain: AntelopeChain } | { kind: 'sui'; chain: SuiChain } | { kind: 'near'; chain: NearChain };
 
 export function chainOfDomain(cfg: IndexerConfig, domain: string | number | null | undefined): Domain | undefined {
   if (domain === null || domain === undefined) return undefined;
@@ -343,6 +363,8 @@ export function chainOfDomain(cfg: IndexerConfig, domain: string | number | null
   if (far) return { kind: 'antelope', chain: far };
   const sui = suiByDomain(String(domain));
   if (sui) return { kind: 'sui', chain: sui };
+  const near = nearByDomain(String(domain));
+  if (near) return { kind: 'near', chain: near };
   const source = cfg.sources.find((s) => String(s.chain.chainId) === String(domain));
   return source && { kind: 'evm', ...source };
 }

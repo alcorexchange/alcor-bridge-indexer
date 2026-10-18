@@ -263,6 +263,41 @@ and no swap plans through Sui yet.
   committee certified it. `committee` says which epoch `lightClient.account`
   holds.
 
+### NEAR, both ways
+
+NEAR is its own kind of chain, `"kind": "near"`: `"id": "near"`, domain
+`"14338890689662875897"` on mainnet, and `"id": "near-testnet"`, domain
+`"15529777497819211366"` on testnet (the first eight bytes of each genesis
+hash). On only where the instance has `NEAR_RPC` / `NEAR_TESTNET_RPC`, and only
+once the ledger has a route to it. Only straight to and from Telos: no hops and
+no swap plans through NEAR yet.
+
+- **Addresses.** On Telos every NEAR account is the sha256 of its account id:
+  the vault, each token (the NEP-141 contract's id; native NEAR is `NEAR`), each
+  recipient. `contracts.vault` is the vault's account id (the route's gateway
+  names it, checked against the route), `contracts.vaultAddress` its sha256.
+  The vault holds the Telos light client too, so `contracts.telosClient` is the
+  same account; `telosClient.generation` is the finalizer generation it seats.
+- **Routes** carry `nearToken` (the NEP-141 contract, or `NEAR`) instead of
+  `token`, and the vault's own numbers: `vaultCap`, `vaultHeld`,
+  `depositableNow`, `outflowPerDay`, `outflowLeft`, `withdrawableNow`, all in
+  canonical units. `vaultEnabled` false: the vault refuses deposits of it.
+- **A deposit** is one call from the user's NEAR wallet. A token:
+  `ft_transfer_call` on the token contract with `receiver_id` = the vault,
+  `amount` (raw units), and `msg` = `{"telos_to":"<telos account>"}` (optional
+  `refund_to`, `memo`); what does not divide into whole canonical units is
+  returned by the token. Native NEAR: `deposit_near({"args":{"telos_to":…}})`
+  on the vault with the amount attached — a whole number of canonical units,
+  nothing is returned. The relayer proves it on Telos in seconds.
+- **A withdrawal** starts on Telos as on every route: the bridge token to
+  `bridge.alcor` with the memo `<domain>:0x<sha256 of the NEAR account id>`
+  (the vault's view `address_of({"id": "alice.near"})` returns that hash). It is
+  released on NEAR by the recipient's wallet with `/v1/proofs/w:<id>` (below).
+  Past the deadline, `expire` instead; the relayer then reissues it on Telos.
+- **`strategy`** is `approvals`: a head is final once more than two thirds of
+  its epoch's block-producer stake approved it. `provedTop` is the newest head
+  `lightClient.account` accepted.
+
 ### Ethereum ↔ WAX, through Telos
 
 Two source chains never meet directly: Ethereum to WAX is a deposit to Telos
@@ -1359,6 +1394,51 @@ and `release` (or `expire` past `deadline`) in one programmable transaction.
 When `catchUp` is set, the Sui client seats an older finalizer policy than the
 one that signed: walk `/v1/handovers?after=<seatedGeneration>` first.
 
+For a withdrawal to NEAR the body has a `near` object: the function calls the
+wallet sends to the vault, in order.
+
+```json
+{
+  "chain": "near",
+  "near": {
+    "network": "mainnet",
+    "vault": "vault.alcor.near",
+    "token": "NEAR",
+    "recipient": "alice.near",
+    "recipientAddress": "<sha256 of the recipient's account id, hex>",
+    "signingGeneration": 197, "seatedGeneration": 197, "catchUp": null,
+    "unknownSigners": [],
+    "rootTrusted": false,
+    "action": "release",
+    "calls": [
+      { "contract": "vault.alcor.near", "method": "register_key", "args": { "key": "<base64>", "pop": "<base64>" },
+        "deposit": "10000000000000000000000", "gas": "300000000000000" },
+      { "contract": "vault.alcor.near", "method": "submit_root", "args": { "finality": { … }, "bits": "…", "signature": "…", "policy_keys": […],
+        "pending_policy": null, "pending_bits": null, "pending_signature": null }, "deposit": "…", "gas": "…" },
+      { "contract": "vault.alcor.near", "method": "release", "args": { "proof": { … }, "token": "NEAR", "recipient": "alice.near" },
+        "deposit": "…", "gas": "…" }
+    ]
+  }
+}
+```
+
+- Each call is a `FunctionCall` as near-api-js and the wallet selector take it:
+  `args` JSON (byte strings base64), `deposit` in yoctoNEAR (0.01 NEAR: the
+  storage the call adds, the rest refunded), `gas` in gas units (300 Tgas, the
+  unused part refunded). Send them in this order, as separate transactions.
+- `register_key` comes once per signer key the vault's client does not know
+  yet, with its proof of possession from Telos's `regfinkey` history; anyone
+  may send it. `submit_root` is left out when the root is already trusted.
+- The last call is `release` before `deadline`, `expire` after it (`action`).
+- `recipient` is filled when the vault's own logs named that account (it
+  deposited, it was a refund address, it was paid before). Otherwise it is
+  `null`: the wallet puts in its own account id, whose sha256 must equal
+  `recipientAddress` — the vault checks.
+- When `catchUp` is set the client seats an older finalizer policy than the one
+  that signed: walk `/v1/handovers?after=<seatedGeneration>` (`nearCalls`)
+  first. `unknownSigners` lists signer key ids no history holds; the walk
+  teaches those.
+
 ### `GET /v1/handovers?after=<generation>[&limit=50]`
 
 Telos's finalizer-policy handovers, oldest first, as the indexer stored them
@@ -1370,6 +1450,10 @@ whose handover could not be built is missing; the walk goes on with the next.
 On an instance with Sui each also has `suiCalls`: the two Move calls
 (`submit_root_entry`, `install_policy`) in the same shape as above. Anyone may
 send them; the first withdrawal after a quiet spell usually does.
+
+On an instance with NEAR each also has `nearCalls`: `submit_root` and
+`install_policy` (`{"packed": "<base64 policy>"}`) on the vault, in the call
+shape of `/v1/proofs` above.
 
 ---
 

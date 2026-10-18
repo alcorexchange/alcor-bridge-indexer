@@ -30,6 +30,7 @@ import { resolveRootBlocks } from './roots.ts';
 import { BlockrootKeeper } from './blockroot.ts';
 import { ingestCrossings } from './crossings.ts';
 import { followSuiVault } from './suiVault.ts';
+import { followNearVault } from './nearVault.ts';
 import { crossingsFiles } from '../../src/chains/antelope.ts';
 import { backfillFromHistory } from './history.ts';
 import { createApi } from './api.ts';
@@ -214,6 +215,22 @@ for (const sui of cfg.sui) {
       } catch (err) {
         store.incident('sui', (err as Error).message);
         console.log(`[sui] ${(err as Error).message}`);
+      }
+      await sleep(cfg.swapsMs);
+    }
+  })();
+}
+
+/** NEAR: the vault's log lines, for the NEAR half of each crossing (services/indexer/nearVault.ts). */
+for (const near of cfg.near) {
+  void (async function nearLoop() {
+    while (!stopping) {
+      try {
+        const n = await followNearVault(cfg, store, near);
+        if (n) console.log(`[near] ${n} vault log(s)`);
+      } catch (err) {
+        store.incident('near', (err as Error).message);
+        console.log(`[near] ${(err as Error).message}`);
       }
       await sleep(cfg.swapsMs);
     }
