@@ -463,7 +463,14 @@ sync committee cannot skip a period. It is an operator alarm, not a user one.
 `ram` is what the ledger, the hop and the WAX vault have left for the rows they
 pay for themselves. Out of it, every credit and every withdrawal on every route
 fails until someone buys more, so an account under `RAM_ALARM_BYTES` (500 000 by
-default) is an alarm too. Read once a minute.
+default) is an alarm too. Read once a minute. The relayers' own accounts pay for
+every block they prove to a light client; list them in `RELAYER_RAM_ACCOUNTS` as
+`<chain>:<account>` pairs (`telos:payer,xpr:relayer`) and each one under
+`RELAYER_RAM_ALARM_BYTES` (32 000 by default) is an alarm as well.
+
+A crossing waiting on the bridge three times past its route's usual time, and at
+least fifteen minutes, is an alarm whatever stopped it — a relayer down or out of
+RAM, a follower stuck — unless a hold already explains it.
 
 ### `GET /v1/chains`
 

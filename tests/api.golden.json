@@ -1960,6 +1960,7 @@
     "withdrawal #8 0.03 ETH to Ethereum waits for the daily limit",
     "withdrawal #9 0.03 ETH to Ethereum waits for the daily limit",
     "large withdrawal #13 20 WAX to WAX at 07:59 UTC: 20000% of the route's maximum",
+    "2 crossing(s) waiting on the bridge far past their usual time: deposit #15 0.07 BNB from BNB Smart Chain (12.0h), deposit #2 0.05 ETH from Ethereum (20.0h)",
     "ram: http://telos.test/v1/chain/get_account -> HTTP 400"
    ],
    "savanna": {

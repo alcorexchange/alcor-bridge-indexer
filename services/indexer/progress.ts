@@ -81,6 +81,30 @@ export function transferProgress(row: TransferRow, ctx: ProgressContext): Progre
   };
 }
 
+/**
+ * A crossing waiting on the bridge this many times past its usual time, and
+ * never under fifteen minutes, is an incident rather than a slow chain.
+ * Withdrawals to XPR sat ten hours on 2026-10-18 behind a relayer out of RAM,
+ * every one of them still reading "any moment".
+ */
+export const LATE_FACTOR = 3;
+export const LATE_MIN_SECONDS = 900;
+
+/**
+ * How long a crossing has waited on the bridge, once that is past its bar;
+ * null while it is not. A hold already says what it waits on, a step waiting
+ * on the user is theirs, and an expired withdrawal runs on its deadline's
+ * clock rather than its burn's.
+ */
+export function lateFor(row: TransferRow, ctx: ProgressContext): number | null {
+  if (row.status === 'expired' || ctx.hold(row)) return null;
+  if (transferProgress(row, ctx).waitingOn !== 'bridge') return null;
+  const domain = row.domain ?? '';
+  const eta = row.direction === 'deposit' ? ctx.depositEta(domain) : ctx.withdrawalEta(domain);
+  const waited = ctx.now - row.src_time;
+  return waited > Math.max(LATE_MIN_SECONDS, LATE_FACTOR * (eta?.seconds ?? 0)) ? waited : null;
+}
+
 function depositProgress(row: TransferRow, chain: string, ctx: ProgressContext): Progress {
   switch (row.status) {
     case 'credited': return done('credited on Telos');

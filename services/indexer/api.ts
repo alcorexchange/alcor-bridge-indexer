@@ -43,7 +43,7 @@ import type { BlockrootKeeper } from './blockroot.ts';
 import { rebranch, treeThrough } from './tree.ts';
 import { assetFor, buildFast, confirmationsLeft, fastVerdict, routeFor, routeLimits, routeRoom, warmListings, FastUnavailable } from './fast.ts';
 import { holdOf, isLarge, type HoldContext, type Outflow } from './holds.ts';
-import { transferProgress, type Progress, type ProgressContext } from './progress.ts';
+import { lateFor, transferProgress, type Progress, type ProgressContext } from './progress.ts';
 import { finalizerKeys } from './finalizerKeys.ts';
 import { memo } from './memo.ts';
 import { ramAlarms, ramReport, type RamRow } from './ram.ts';
@@ -433,6 +433,8 @@ const LARGE_WINDOW_SECONDS = 86_400;
 /**
  * What `holds.ts` sees, for an operator: held deposits, deposits over a cap,
  * withdrawals waiting on a daily limit, and large withdrawals of the last day.
+ * Then whatever is late with no hold to explain it (`lateFor`), whatever the
+ * cause: a relayer down or out of RAM says nothing here by itself.
  * Worded like the rows themselves, since this page is public too.
  */
 async function holdAlarms(deps: Deps): Promise<string[]> {
@@ -473,6 +475,22 @@ async function holdAlarms(deps: Deps): Promise<string[]> {
     if (!isLarge(r, route)) continue;
     const share = Number((BigInt(r.amount!) * 100n) / route!.maxWithdrawal);
     alarms.push(`large withdrawal ${shown(r)} at ${clock(r.src_time)}: ${share}% of the route's maximum`);
+  }
+
+  const progress = progressContext(deps);
+  const late = [
+    ...list('deposit', ['seen', 'provable', 'parked']),
+    ...list('withdrawal', ['burned', 'provable']),
+  ].flatMap((r) => {
+    const waited = lateFor(r, progress);
+    return waited === null ? [] : [{ r, waited }];
+  });
+  if (late.length) {
+    const hours = (s: number) => `${(s / 3600).toFixed(1)}h`;
+    alarms.push(
+      `${late.length} crossing(s) waiting on the bridge far past their usual time: ` +
+        late.slice(0, 5).map(({ r, waited }) => `${r.direction} ${shown(r)} (${hours(waited)})`).join(', '),
+    );
   }
   return alarms;
 }

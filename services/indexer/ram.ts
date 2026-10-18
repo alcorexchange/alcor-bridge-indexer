@@ -32,6 +32,32 @@ export const RAM_ALARM_BYTES = Number(process.env.RAM_ALARM_BYTES ?? 500_000);
  */
 export const ROUTE_RAM_ALARM_BYTES = Number(process.env.ROUTE_RAM_ALARM_BYTES ?? 32_000);
 
+/**
+ * A relayer's bar. Every block it proves to a light client is a row of a few
+ * hundred bytes billed to it, and only the client's owner can prune them. Out
+ * of RAM, its chain's crossings stop: withdrawals to XPR sat ten hours on
+ * 2026-10-18 behind a relayer 188 bytes short. At a handful of proofs a day,
+ * this is a few weeks' warning.
+ */
+export const RELAYER_RAM_ALARM_BYTES = Number(process.env.RELAYER_RAM_ALARM_BYTES ?? 32_000);
+
+/**
+ * The relayers' own accounts, as `<chain>:<account>` pairs separated by commas:
+ * `telos:payer,xpr:relayer`. Configured rather than read from a chain,
+ * because nothing on chain says who relays.
+ */
+export function parseRelayerAccounts(raw: string): { chain: string; account: string }[] {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const [chain, account] = pair.split(':').map((s) => s.trim());
+      if (!chain || !account) throw new Error(`RELAYER_RAM_ACCOUNTS: "${pair}" is not <chain>:<account>`);
+      return { chain, account };
+    });
+}
+
 async function ramOf(rpc: { rpc: string[] }, chain: string, account: string, alarmAt = RAM_ALARM_BYTES): Promise<RamRow> {
   const a = await antelopeRpc(rpc, '/v1/chain/get_account', { account_name: account });
   const used = Number(a.ram_usage);
@@ -41,8 +67,9 @@ async function ramOf(rpc: { rpc: string[] }, chain: string, account: string, ala
 
 /**
  * The ledger and the hop on Telos, the vault on each Antelope chain this
- * instance reads, and bridgeroute wherever it is deployed. A vault's account is
- * the one the ledger's routes to that chain name, so it is never configured twice.
+ * instance reads, bridgeroute wherever it is deployed, and the relayers in
+ * `RELAYER_RAM_ACCOUNTS`. A vault's account is the one the ledger's routes to
+ * that chain name, so it is never configured twice.
  */
 export async function ramReport(cfg: IndexerConfig): Promise<RamRow[]> {
   const telos = [cfg.accounts.bridge, cfg.savanna.accounts.hop].filter((a): a is string => !!a);
@@ -66,6 +93,12 @@ export async function ramReport(cfg: IndexerConfig): Promise<RamRow[]> {
       const vault = vaults.get(a.chain.domain);
       if (vault) reads.push(ramOf({ rpc: [a.rpc] }, a.chain.id, vault.account));
     }
+  }
+
+  for (const r of parseRelayerAccounts(process.env.RELAYER_RAM_ACCOUNTS ?? '')) {
+    const far = cfg.antelope.find((a) => a.chain.id === r.chain);
+    if (r.chain !== SETTLEMENT_CHAIN && !far) throw new Error(`RELAYER_RAM_ACCOUNTS: this instance reads no chain "${r.chain}"`);
+    reads.push(ramOf(far ? { rpc: [far.rpc] } : cfg.savanna, r.chain, r.account, RELAYER_RAM_ALARM_BYTES));
   }
   return Promise.all(reads);
 }

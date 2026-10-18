@@ -7,7 +7,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { TransferRow } from '../services/indexer/db.ts';
-import { transferProgress, type ProgressContext } from '../services/indexer/progress.ts';
+import type { Hold } from '../services/indexer/holds.ts';
+import { LATE_FACTOR, LATE_MIN_SECONDS, lateFor, transferProgress, type ProgressContext } from '../services/indexer/progress.ts';
 import { antelopeDepositEta, antelopeWithdrawalEta } from '../src/chains/eta.ts';
 import { antelopeById } from '../src/chains/antelope.ts';
 
@@ -80,4 +81,33 @@ test('finished crossings are 100 with nothing waiting', () => {
   ] as const) {
     assert.deepEqual(transferProgress(row({ direction, status }), ctx), { stage, percent: 100, etaSeconds: null, exact: true, waitingOn: null });
   }
+});
+
+test('a WAX withdrawal still unpaid hours after its burn is late, whatever stopped it', () => {
+  // 2026-10-18: withdrawals to XPR sat ten hours behind a relayer out of RAM,
+  // each reading "any moment". The bar is the measured time, three times over.
+  const bar = Math.max(LATE_MIN_SECONDS, LATE_FACTOR * antelopeWithdrawalEta(waxChain).seconds);
+  const burned = (age: number) => row({ direction: 'withdrawal', status: 'burned', domain: WAX, src_time: NOW - age });
+  assert.equal(lateFor(burned(bar), ctx), null);
+  assert.equal(lateFor(burned(bar + 1), ctx), bar + 1);
+  assert.equal(lateFor(burned(36_000), ctx), 36_000);
+});
+
+test('an Ethereum deposit is late only well past finality, and never under fifteen minutes', () => {
+  const seen = (age: number) => row({ amount: '6000000000', src_time: NOW - age });
+  assert.equal(lateFor(seen(3 * 900), ctx), null);
+  assert.equal(lateFor(seen(3 * 900 + 1), ctx), 3 * 900 + 1);
+  const quick = { ...ctx, depositEta: () => ({ ...finality, seconds: 10 }) };
+  assert.equal(lateFor(seen(LATE_MIN_SECONDS), quick), null);
+  assert.equal(lateFor(seen(LATE_MIN_SECONDS + 1), quick), LATE_MIN_SECONDS + 1);
+});
+
+test('a crossing waiting on its user, held, finished or expired is never late', () => {
+  const old = { src_time: NOW - 86_400 };
+  assert.equal(lateFor(row({ direction: 'withdrawal', status: 'provable', ...old }), ctx), null);
+  assert.equal(lateFor(row({ direction: 'withdrawal', status: 'released', ...old }), ctx), null);
+  assert.equal(lateFor(row({ direction: 'withdrawal', status: 'expired', domain: WAX, ...old }), ctx), null);
+  const hold: Hold = { flag: 'daily-limit', stage: 'waiting for the daily limit', until: null };
+  const held = { ...ctx, hold: () => hold };
+  assert.equal(lateFor(row({ direction: 'withdrawal', status: 'burned', domain: WAX, ...old }), held), null);
 });
