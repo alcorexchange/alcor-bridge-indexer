@@ -19,7 +19,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { EVM_CHAINS } from '../../src/chains/evm.ts';
-import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, humanEta, withdrawalEta } from '../../src/chains/eta.ts';
+import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, humanEta, suiDepositEta, suiWithdrawalEta, withdrawalEta } from '../../src/chains/eta.ts';
+import { clientState, vaultState, type VaultState } from '../../src/sui/client.ts';
+import { installPolicyCall, settleCall, submitRootCall } from '../../src/sui/withdrawal.ts';
 import { antelopeById } from '../../src/chains/antelope.ts';
 import { SLOT_SECONDS } from '../../src/config.ts';
 import { proverootPositional } from '../../src/proofs.ts';
@@ -167,6 +169,7 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
         `${base}/v1/transfers`,
         `${base}/v1/transfers/<key>`,
         `${base}/v1/proofs/<key>`,
+        `${base}/v1/handovers?after=<generation>[&limit=50]`,
         `${base}/v1/hops`,
         `${base}/v1/swap/quote?chain=&tokenIn=&tokenOut=&amountIn=[&slippageBps=50]`,
         `${base}/v1/swap/plan?from=&to=&amount=&recipient=&sender=[&slippageBps=50][&deadlineSeconds=1800]`,
@@ -210,6 +213,9 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
   }
   if (path === '/v1/chains') {
     return send(res, 200, await status(deps));
+  }
+  if (path === '/v1/handovers') {
+    return send(res, 200, await handovers(deps, intParam(q, 'after', 0, 2 ** 32) ?? 0, intParam(q, 'limit', 1, 100) ?? 50), 30);
   }
   if (path === '/v1/routes') {
     const all = (await routes(deps)) as { symbol: string; from: string; to: string }[];
@@ -796,7 +802,7 @@ async function pending(
     // A deposit from an Antelope chain is proved by that chain's relayer, not
     // pushed from here: there is no proof to offer, no fast path and no
     // ancestry deadline — only how far its producers have got.
-    if (r.direction === 'deposit' && far?.kind === 'antelope') {
+    if (r.direction === 'deposit' && (far?.kind === 'antelope' || far?.kind === 'sui')) {
       out.push({
         key: r.key,
         direction: 'deposit',
@@ -869,6 +875,19 @@ async function pending(
 
     // Rolled back on the far side: what is outstanding is the refund at home,
     // and it needs the vault's `Voided` log proved on the settlement chain.
+    if (r.status === 'expired' && far?.kind === 'sui') {
+      out.push({
+        key: voidKey(r.ref),
+        direction: 'withdrawal-rollback',
+        action: `reissued by the ${far.chain.name} relayer`,
+        pushOn: SETTLEMENT_CHAIN,
+        ready: false,
+        reason: 'expired on Sui; the relayer proves the Voided event and the burned amount is reissued',
+        proof: null,
+        ...transfer,
+      });
+      continue;
+    }
     if (r.status === 'expired') {
       const vk = voidKey(r.ref);
       const ready = deps.store.hasProof(vk);
@@ -893,11 +912,13 @@ async function pending(
     out.push({
       key: r.key,
       direction: pastDeadline ? 'withdrawal-expire' : 'withdrawal',
-      action: pastDeadline
-        ? 'expire'
-        : d.track === 'light'
-          ? 'release (~135k gas)'
-          : 'submitRoot + release (~2.6M gas)',
+      action: far?.kind === 'sui'
+        ? (pastDeadline ? 'submit_root_entry + expire_entry' : 'submit_root_entry + release_entry')
+        : pastDeadline
+          ? 'expire'
+          : d.track === 'light'
+            ? 'release (~135k gas)'
+            : 'submitRoot + release (~2.6M gas)',
       // The chain the withdrawal is BOUND FOR, from the row's own domain —
       // not this instance's own chain. With one source they were the same
       // string, which is exactly why it went unnoticed; with four, a BSC
@@ -1073,7 +1094,9 @@ function decorate(deps: Deps, row: TransferRow): DecoratedTransfer {
         precision: listed.precision,
         ...(far?.kind === 'antelope'
           ? { contract: antelopeToken(row.token ?? '')?.contract }
-          : { address: row.token ?? undefined }),
+          : far?.kind === 'sui'
+            ? { token: row.token ?? undefined }
+            : { address: row.token ?? undefined }),
       }
     : null;
   const chain = far?.chain.id ?? null;
@@ -1103,15 +1126,18 @@ function progressContext(deps: Deps): ProgressContext {
     evmHead: (domain) => followerOf(deps, domain)?.state.head || undefined,
     route: routeLimits,
     chainName: (domain) => of(domain)?.chain.name ?? 'the far chain',
-    isAntelope: (domain) => of(domain)?.kind === 'antelope',
+    // A Sui deposit, like an Antelope one, is proved by its relayer.
+    isAntelope: (domain) => of(domain)?.kind === 'antelope' || of(domain)?.kind === 'sui',
     depositEta: (domain) => {
       const far = of(domain);
       if (!far) return null;
+      if (far.kind === 'sui') return suiDepositEta(far.chain);
       return far.kind === 'antelope' ? antelopeDepositEta(far.chain) : depositEta(far.chain);
     },
     withdrawalEta: (domain) => {
       const far = of(domain);
       if (!far) return null;
+      if (far.kind === 'sui') return suiWithdrawalEta(far.chain);
       return far.kind === 'antelope' ? antelopeWithdrawalEta(far.chain) : withdrawalEta(far.chain);
     },
     hold: (row) => holdOf(row, holdContext(deps)),
@@ -1317,7 +1343,11 @@ async function proof(deps: Deps, key: string): Promise<Answer> {
   const row = transferOf(deps, key, stored?.kind);
   if (!row) return { code: 404, body: { error: 'no such transfer' } };
   if (!stored) return proofOnDemand(deps, row);
-  if (stored.kind === 'withdrawal') return withdrawalProof(deps, row, JSON.parse(stored.body));
+  if (stored.kind === 'withdrawal') {
+    const artifact = JSON.parse(stored.body);
+    const far = chainOfDomain(deps.cfg, row.domain);
+    return far?.kind === 'sui' ? suiWithdrawalProof(deps, row, artifact) : withdrawalProof(deps, row, artifact);
+  }
 
   const kind = stored.kind as SettledKind;
   const body = JSON.parse(stored.body);
@@ -1546,6 +1576,95 @@ function withdrawalProof(deps: Deps, row: TransferRow, artifact: WithdrawalArtif
   }
 }
 
+/** A Sui vault read once a minute: its package, client and coins change only by an owner's hand. */
+const suiVaults = new Map<string, { at: number; state: Promise<VaultState> }>();
+function suiVaultSoon(graphql: string[], vault: string): Promise<VaultState> {
+  const hit = suiVaults.get(vault);
+  if (hit && Date.now() - hit.at < 60_000) return hit.state;
+  const state = vaultState(graphql, vault);
+  state.catch(() => suiVaults.delete(vault));
+  suiVaults.set(vault, { at: Date.now(), state });
+  return state;
+}
+
+/**
+ * A withdrawal's release on Sui, as the Move calls a wallet makes: the root
+ * first (`submit_root_entry`, a root already trusted is trusted again), then
+ * `release_entry<coin>` before the deadline or `expire_entry` after it. Both in
+ * one programmable transaction is the usual way.
+ *
+ * The client must know every signer and should seat the generation that signed:
+ * when it is behind, `catchUp` names the handovers to walk first, each a
+ * `submit_root_entry` and an `install_policy` (see `/v1/handovers`).
+ */
+async function suiWithdrawalProof(deps: Deps, row: TransferRow, artifact: WithdrawalArtifact): Promise<Answer> {
+  const sui = deps.cfg.sui?.[0];
+  if (!sui) return { code: 404, body: { error: 'this instance has no Sui endpoint (SUI_GRAPHQL)' } };
+  const vault = await suiVaultSoon(sui.graphql, artifact.vault);
+  const token = String((artifact.release as any).token).replace(/^0x/, '').toLowerCase();
+  const coin = vault.assets.find((a) => a.token === token);
+  if (!coin) return { code: 404, body: { error: `the vault ${artifact.vault} lists no coin with token ${token}` } };
+  const client = await clientState(sui.graphql, vault.telosClient);
+  const root = frozenSubmitRoot(artifact.submitRoot);
+  const signing = Number(root.finality.activeGeneration);
+  // The package that defines the vault. After an upgrade the calls go to the
+  // newest version instead; nothing has been upgraded yet.
+  const ids = { package: vault.package, telosClient: vault.telosClient, vault: vault.vault, coinType: '0x' + coin.coinType };
+  return {
+    code: 200,
+    body: {
+      key: row.key,
+      direction: 'withdrawal',
+      chain: sui.chain.id,
+      burnBlock: artifact.burnBlock,
+      rootBlock: artifact.rootBlock,
+      vault: artifact.vault,
+      status: row.status,
+      deadline: row.deadline,
+      sui: {
+        ...ids,
+        signingGeneration: signing,
+        seatedGeneration: client.generation,
+        catchUp: client.generation < signing ? `/v1/handovers?after=${client.generation}` : null,
+        calls: {
+          submitRoot: submitRootCall(ids.package, ids.telosClient, root),
+          release: settleCall('release', ids, artifact),
+          expire: settleCall('expire', ids, artifact),
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Telos's finalizer-policy handovers, stored as they happen: what a light
+ * client that lags walks to catch up, oldest first. A generation whose
+ * handover could not be built is missing from the list; the next one is
+ * signed by it and still verifies against seats held from before.
+ */
+async function handovers(deps: Deps, after: number, limit: number) {
+  // On an instance that shows Sui, each handover also as the two Move calls
+  // that walk the Sui client over it.
+  const sui = deps.cfg.sui?.length
+    ? ((await status(deps)).sources as any[]).find((x) => x.kind === 'sui')?.contracts
+    : undefined;
+  const rows = deps.store.handoversAfter(after, limit).map((h) => {
+    const body = JSON.parse(h.body);
+    return {
+      ...body,
+      ...(sui?.package && sui.telosClient
+        ? {
+            suiCalls: [
+              submitRootCall(sui.package, sui.telosClient, body.submitRoot),
+              installPolicyCall(sui.package, sui.telosClient, body.submitRoot.pending.policy),
+            ],
+          }
+        : {}),
+    };
+  });
+  return { handovers: rows, count: rows.length };
+}
+
 /** The cheapest root to fold a burn into: the oldest at or after it that the withdrawal's own chain trusts. */
 function rootCovering(deps: Deps, row: TransferRow, burnBlock: number) {
   const target = chainOfDomain(deps.cfg, row.domain);
@@ -1656,7 +1775,7 @@ function ancestryDeadline(cfg: IndexerConfig, row: TransferRow): number | undefi
  */
 function proofWait(deps: Deps, row: TransferRow): string {
   const source = chainOfDomain(deps.cfg, row.domain);
-  const eta = source?.kind === 'evm' ? depositEta(source.chain) : null;
+  const eta = source?.kind === 'evm' ? depositEta(source.chain) : source?.kind === 'sui' ? suiDepositEta(source.chain) : null;
   return eta?.human ?? 'a wait this chain has no measured figure for';
 }
 

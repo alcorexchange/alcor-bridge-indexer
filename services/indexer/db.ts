@@ -928,6 +928,13 @@ export class Store {
       | undefined;
   }
 
+  /** The stored handovers above `generation`, oldest first. */
+  handoversAfter(generation: number, limit: number): { generation: number; block: number; body: string }[] {
+    return this.db
+      .prepare('SELECT generation, block, body FROM handovers WHERE generation > ? ORDER BY generation LIMIT ?')
+      .all(generation, limit) as { generation: number; block: number; body: string }[];
+  }
+
   // --- trusted roots ------------------------------------------------------------
 
   putRoot(

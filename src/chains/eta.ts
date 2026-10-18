@@ -19,6 +19,7 @@
 
 import type { EvmChain } from './evm.ts';
 import type { AntelopeChain, Span } from './antelope.ts';
+import type { SuiChain } from './sui.ts';
 
 const add = (...spans: Span[]): Span =>
   spans.reduce((a, b) => ({
@@ -219,5 +220,27 @@ export function antelopeWithdrawalEta(chain: AntelopeChain): Eta {
       { what: `the relayer releases it on ${chain.name}`, span: { min: 3, typical: 15, max: 40 } },
     ],
     true,
+  );
+}
+
+/** Sui → Telos: the checkpoint certified, then the relayer's proof on Telos. */
+export function suiDepositEta(chain: SuiChain): Eta {
+  return eta(
+    [
+      { what: `the ${chain.name} committee certifies the checkpoint`, span: chain.deposit.certify },
+      { what: 'the relayer proves it on Telos', span: chain.deposit.prove },
+    ],
+    false,
+  );
+}
+
+/** Telos → Sui: the burn finalized, then the recipient's own release. */
+export function suiWithdrawalEta(chain: SuiChain): Eta {
+  return eta(
+    [
+      { what: 'Telos finalizes the burn', span: chain.withdrawal.finalize },
+      { what: `the wallet releases it on ${chain.name}`, span: chain.withdrawal.release },
+    ],
+    false,
   );
 }

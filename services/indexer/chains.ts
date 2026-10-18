@@ -16,7 +16,7 @@
  */
 
 import type { EvmChain } from '../../src/chains/evm.ts';
-import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, withdrawalEta, type Eta } from '../../src/chains/eta.ts';
+import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, suiDepositEta, suiWithdrawalEta, withdrawalEta, type Eta } from '../../src/chains/eta.ts';
 import { antelopeVaults } from '../../src/chains/antelope.ts';
 import { HOP_MEMO, antelopeSwapsView, evmSwapsView } from '../../src/chains/swaps.ts';
 import { hexToName } from '../../src/proof/pack.ts';
@@ -24,7 +24,9 @@ import type { BlockrootKeeper } from './blockroot.ts';
 import { assetOfRoute } from './fast.ts';
 import { execFor, selector, type Exec } from '../../src/evm/exec.ts';
 import { antelopeRpc, getTableRows } from '../../src/net/antelope.ts';
-import { SETTLEMENT_CHAIN, type AntelopeConfig, type IndexerConfig } from './config.ts';
+import { SETTLEMENT_CHAIN, type AntelopeConfig, type IndexerConfig, type SuiConfig } from './config.ts';
+import { outflowLeftNow, vaultState } from '../../src/sui/client.ts';
+import { suiGraphql } from '../../src/sui/proof.ts';
 import { epochBacklog } from './parlia.ts';
 import { trustedSet } from '../../src/polygon/proof.ts';
 import { comet, heimdallOf, latestHeight } from '../../src/polygon/heimdall.ts';
@@ -468,6 +470,13 @@ export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<stri
   );
 
   const antelopeSources = await antelope;
+  const suiSources = await Promise.all((cfg.sui ?? []).map((c) => suiStatus(cfg, ledger, c).catch((err) => ({
+    id: c.chain.id,
+    name: c.chain.name,
+    kind: 'sui',
+    error: (err as Error).message,
+    routes: [],
+  }))));
   return {
     settlement: {
       id: SETTLEMENT_CHAIN,
@@ -479,7 +488,7 @@ export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<stri
       ...savannaState,
       note: 'one state-history stream and one finality tree serve every source chain',
     },
-    sources: [...sources, ...antelopeSources],
+    sources: [...sources, ...antelopeSources, ...suiSources],
   };
 }
 
@@ -686,6 +695,96 @@ async function antelopeStatus(cfg: IndexerConfig, ledger: Ledger, far: AntelopeC
       withdrawals: paused === false && light.onFar && openWithdrawal,
       ...(reasons.length ? { reason: reasons.join('; ') } : {}),
     },
+    routes,
+  };
+}
+
+/**
+ * Sui: the ledger's routes to it, joined with the vault object read over
+ * GraphQL. Deposits are proved by the Sui relayer; a withdrawal is released by
+ * the recipient's wallet with `/v1/proofs/w:<id>` (two calls, the package and
+ * objects named there). The vault's cap, daily allowance and minimum are in
+ * canonical units; what it holds is raw, `scale` to a canonical unit.
+ */
+async function suiStatus(cfg: IndexerConfig, ledger: Ledger, sui: SuiConfig) {
+  const chain = sui.chain;
+  const base = {
+    id: chain.id,
+    name: chain.name,
+    kind: 'sui' as const,
+    chainId: chain.chainId,
+    domain: chain.domain,
+    /** Checkpoints certified by the epoch's committee, BLS min-sig, more than 2/3 of the stake. */
+    strategy: 'committee',
+    head: null as number | null,
+    provedTop: null as ProvedTop,
+    behind: null as number | null,
+    lightClient: { account: null as string | null, contract: null as string | null },
+    gateway: null as string | null,
+    contracts: { vault: null as string | null, package: null as string | null, telosClient: null as string | null },
+    upkeep: null as Record<string, unknown> | null,
+    deposits: { supported: true },
+    timing: { deposit: suiDepositEta(chain), withdrawal: suiWithdrawalEta(chain) },
+    active: { deposits: false, withdrawals: false, reason: `no route to ${chain.name} on the ledger` } as ChainStatus['active'],
+    routes: [] as unknown[],
+    /** A Sui address: 0x and 64 hex digits. */
+    accountFormat: '^0x[0-9a-fA-F]{64}$',
+    swaps: null,
+  };
+  const route = ledger.routes.find((r) => String(r.domain) === chain.domain);
+  if (!route) return base;
+
+  const vaultId = '0x' + String(route.vault).toLowerCase();
+  const gateway = String(route.gateway);
+  const [gatewayCfg, vault, head] = await Promise.all([
+    getTableRows<any>(cfg.savanna, { code: gateway, scope: gateway, table: 'config', limit: 1 }).then((r) => r[0]),
+    vaultState(sui.graphql, vaultId),
+    suiGraphql(sui.graphql, '{ checkpoint { sequenceNumber } }').then((d) => Number(d.checkpoint.sequenceNumber)),
+  ]);
+  const lightClient = gatewayCfg ? String(gatewayCfg.light_client) : null;
+  const newest = lightClient
+    ? (await antelopeRpc(cfg.savanna, '/v1/chain/get_table_rows', { code: lightClient, scope: lightClient, table: 'committees', reverse: true, limit: 1, json: true }))?.rows?.[0]
+    : undefined;
+
+  const now = Date.now();
+  const routes = routesOf(ledger, chain.domain, vaultId).map((r) => {
+    // The route's ext_token is sha256 of the coin type; `routesOf` hands it over as `token`.
+    const a = vault.assets.find((x) => x.token === r.token?.replace(/^0x/, '').toLowerCase());
+    if (!a) return { ...r, token: null, outflowError: 'the vault does not list this coin' };
+    const left = outflowLeftNow(a, now);
+    const held = a.held / a.scale;
+    const room = a.cap === 0n ? null : a.cap - held;
+    return {
+      ...r,
+      /** The Sui coin type to deposit, as a wallet takes it. */
+      token: null,
+      coinType: '0x' + a.coinType,
+      outflowPerDay: left === null ? null : a.perPeriod.toString(),
+      outflowLeft: left === null ? null : left.toString(),
+      withdrawableNow: withdrawableNow(r, left),
+      vaultCap: a.cap === 0n ? null : a.cap.toString(),
+      vaultHeld: held.toString(),
+      depositableNow: room === null ? null : (room < 0n ? 0n : room).toString(),
+      vaultEnabled: a.enabled,
+      vaultMinDeposit: a.minDeposit.toString(),
+    };
+  });
+  return {
+    ...base,
+    head,
+    /** On Sui the light client proves epochs, not blocks: the newest committee it holds. */
+    provedTop: null,
+    committee: newest ? { epoch: Number(newest.epoch), startMs: Number(newest.start_ms), members: (newest.stakes ?? []).length } : null,
+    lightClient: { account: lightClient, contract: null },
+    gateway,
+    contracts: { vault: vaultId, package: vault.package, telosClient: vault.telosClient },
+    active: {
+      deposits: !vault.depositsPaused && routes.some((r: any) => r.deposits && r.vaultEnabled),
+      withdrawals: !vault.withdrawalsPaused && routes.some((r: any) => r.withdrawals),
+      reason: vault.depositsPaused || vault.withdrawalsPaused
+        ? `the vault is paused (deposits ${vault.depositsPaused}, withdrawals ${vault.withdrawalsPaused})`
+        : 'open',
+    } as ChainStatus['active'],
     routes,
   };
 }

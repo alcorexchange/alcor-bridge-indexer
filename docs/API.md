@@ -233,6 +233,36 @@ string end to end. Every point under WAX holds, with these differences:
 - **`active`** folds in the vault's pause flag and both light clients holding a
   policy; there is no keeper to wait for.
 
+### Sui, both ways
+
+Sui is its own kind of chain, `"kind": "sui"`, `"id": "sui"`, domain
+`"3856007665771390095"` (the first eight bytes of its chain identifier). On only
+where the instance has `SUI_GRAPHQL`. Only straight to and from Telos: no hops
+and no swap plans through Sui yet.
+
+- **Objects**, in `contracts`: the `vault` (shared), the `package` that defines
+  it and the `telosClient` (shared). Read them from here, never from your own
+  source: they are what the ledger's route names.
+- **Routes** carry `coinType` (what to deposit, as a wallet takes it) instead
+  of `token`, and the vault's own numbers: `vaultCap`, `vaultHeld`,
+  `depositableNow`, `outflowPerDay`, `outflowLeft`, `withdrawableNow`, all in
+  canonical units. `vaultEnabled` false: the vault refuses deposits of it.
+- **A deposit** is one Move call from the user's Sui wallet, in a programmable
+  transaction: split the amount off a coin, then
+  `<package>::vault::deposit<coinType>(vault, coin, telos_to, refund_to, 0, 0, memo)`
+  and transfer the coin it returns (the dust below one canonical unit) back to
+  the sender. `telos_to` is the Telos account as its 64-bit name, `refund_to`
+  the sender's Sui address, `memo` empty. The relayer proves it on Telos in
+  seconds; it is a row in `/v1/transfers` like any other.
+- **A withdrawal** starts on Telos as on every route: the bridge token to
+  `bridge.alcor` with the memo `3856007665771390095:0x<64 hex>`. It is released
+  on Sui by the recipient's wallet with `/v1/proofs/w:<id>` (below): the root,
+  then `release_entry` — one programmable transaction. Past the deadline,
+  `expire_entry` instead; the relayer then reissues it on Telos.
+- **`strategy`** is `committee`: a checkpoint is final once the epoch's
+  committee certified it. `committee` says which epoch `lightClient.account`
+  holds.
+
 ### Ethereum ↔ WAX, through Telos
 
 Two source chains never meet directly: Ethereum to WAX is a deposit to Telos
@@ -1303,6 +1333,43 @@ cacheable over HTTP, when something was not.
 
 Arguments ready to send. `404` while nothing is stored yet, with the transfer's
 status in the body so you can say *why*.
+
+For a withdrawal to Sui the body has a `sui` object instead of `hard`/`light`:
+
+```json
+{
+  "chain": "sui",
+  "sui": {
+    "package": "0x…", "telosClient": "0x…", "vault": "0x…", "coinType": "0x…::sui::SUI",
+    "signingGeneration": 197, "seatedGeneration": 197, "catchUp": null,
+    "calls": {
+      "submitRoot": { "target": "0x…::telos_client::submit_root_entry", "typeArguments": [], "arguments": [{ "object": "0x…" }, { "type": "u32", "value": 1 }, …] },
+      "release":    { "target": "0x…::vault::release_entry", "typeArguments": ["0x…::sui::SUI"], "arguments": [{ "object": "0x…" }, …, { "object": "0x6" }] },
+      "expire":     { "target": "0x…::vault::expire_entry", "typeArguments": [], "arguments": […] }
+    }
+  }
+}
+```
+
+Each argument is `{ "object": id }` (pass it as an object) or
+`{ "type": "u32" | "u64" | "vector<u8>" | "vector<bool>" | "vector<vector<u8>>", "value": … }`
+(a pure value of that Move type; byte vectors are `0x` hex). Put `submitRoot`
+and `release` (or `expire` past `deadline`) in one programmable transaction.
+
+When `catchUp` is set, the Sui client seats an older finalizer policy than the
+one that signed: walk `/v1/handovers?after=<seatedGeneration>` first.
+
+### `GET /v1/handovers?after=<generation>[&limit=50]`
+
+Telos's finalizer-policy handovers, oldest first, as the indexer stored them
+when they happened: `{ generation, block, carrierBlock, previousGeneration,
+submitRoot }`. A light client that lags walks them in order: the root of each
+(`submitRoot`), then its policy (`submitRoot.pending.policy`). A generation
+whose handover could not be built is missing; the walk goes on with the next.
+
+On an instance with Sui each also has `suiCalls`: the two Move calls
+(`submit_root_entry`, `install_policy`) in the same shape as above. Anyone may
+send them; the first withdrawal after a quiet spell usually does.
 
 ---
 

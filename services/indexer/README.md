@@ -250,6 +250,7 @@ process's own knobs live in the environment.
 | `CROSSINGS_MS` | `200` | how often the WAX, XPR and Vaulta relayers' crossings files are read; a local stat |
 | `WAX_HISTORY`, `XPR_HISTORY`, `VAULTA_HISTORY` | `https://wax.eosusa.io`, `https://proton.eosusa.io`, `https://eos.eosusa.io,https://eos.hyperion.eosrio.io` | each chain's Hyperion, to complete a row whose far transaction the relayers did not record |
 | `VAULTA_RPC` | unset | Vaulta's HTTP API; setting it turns Vaulta on (no keeper, no state-history: its relayers prove everything) |
+| `SUI_GRAPHQL` | unset | Sui's GraphQL endpoints, comma-separated; setting it turns Sui on in `/v1/chains`, its withdrawals' Move calls in `/v1/proofs` and `suiCalls` in `/v1/handovers` |
 
 ## Tests
 

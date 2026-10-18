@@ -237,6 +237,8 @@ type ChainRoute = {
   depositMemo?: string;
   token?: string | null;
   antelopeToken?: { contract: string; symbol: string; precision: number };
+  /** On Sui: the coin type to deposit. */
+  coinType?: string;
 };
 
 type ChainEntry = {
@@ -311,6 +313,8 @@ function openness(reasons: (string | null)[], max: string | null) {
 }
 
 const isAntelope = (c: ChainEntry) => c.kind === 'antelope';
+/** Sui crosses to and from Telos only: hop.alcor predates its 32-byte addresses. */
+const isSui = (c: ChainEntry) => c.kind === 'sui';
 const domainOf = (c: ChainEntry) => String(c.domain ?? c.chainId);
 const recipientHint = (c: ChainEntry) => (isAntelope(c) ? '<account>' : '0x<address>');
 
@@ -346,7 +350,9 @@ export function routesBetween(
         max: depositMax,
         how: isAntelope(a)
           ? { transfer: { contract: r.antelopeToken?.contract ?? null, memo: r.depositMemo ?? '<telos account>' } }
-          : { deposit: { token: r.token ?? null, telosTo: '<telos account>' } },
+          : isSui(a)
+            ? { deposit: { coinType: r.coinType ?? null, telosTo: '<telos account>' } }
+            : { deposit: { token: r.token ?? null, telosTo: '<telos account>' } },
       });
       out.push({
         symbol: r.symbol,
@@ -361,7 +367,7 @@ export function routesBetween(
       });
 
       for (const b of chains) {
-        if (b === a) continue;
+        if (b === a || isSui(a) || isSui(b)) continue;
         const onward = b.routes?.find((x) => x.symbol === r.symbol);
         if (!onward) continue;
         const reasons: (string | null)[] = [];

@@ -79,3 +79,48 @@ export function proofArgs(artifact: any): (string | number | string[] | boolean[
     tree.siblings, tree.left,
   ];
 }
+
+/** A Move call's argument as a wallet builds it: a shared object, or a pure value of a Move type. */
+export type MoveArg = { object: string } | { type: string; value: string | number | boolean | (string | boolean)[] };
+export type MoveCall = { target: string; typeArguments: string[]; arguments: MoveArg[] };
+
+// The parameter types of `telos_client::submit_root_entry` after the client, and
+// of `vault::release_entry` / `expire_entry` between the client and the clock.
+const SUBMIT_ROOT_TYPES = [
+  'u32', 'u32', 'u32', 'u32', 'vector<u8>', 'vector<u8>', 'u32', 'vector<u8>', 'u32', 'vector<u8>', 'u32', 'u32', 'vector<u8>',
+  'vector<u8>', 'vector<u8>', 'vector<vector<u8>>', 'vector<u8>', 'vector<u8>', 'vector<u8>',
+];
+const PROOF_TYPES = [
+  'vector<u8>', 'u64', 'vector<u8>', 'vector<vector<u8>>', 'vector<bool>',
+  'u32', 'u32', 'u32', 'u32', 'u32', 'vector<u8>', 'vector<vector<u8>>', 'vector<bool>',
+];
+/** Sui's shared clock. */
+export const SUI_CLOCK = '0x6';
+
+function typed(types: string[], values: unknown[]): MoveArg[] {
+  if (types.length !== values.length) throw new Error(`expected ${types.length} arguments, built ${values.length}`);
+  return values.map((value, i) => ({ type: types[i], value: value as any }));
+}
+
+/** `submit_root_entry` on the client for a root half (an artifact's, or a handover's). */
+export function submitRootCall(pkg: string, telosClient: string, s: SubmitRootArgs): MoveCall {
+  return {
+    target: `${pkg}::telos_client::submit_root_entry`,
+    typeArguments: [],
+    arguments: [{ object: telosClient }, ...typed(SUBMIT_ROOT_TYPES, submitRootArgs(s))],
+  };
+}
+
+/** `install_policy` with the policy a handover's certificate committed to. */
+export function installPolicyCall(pkg: string, telosClient: string, packed: string): MoveCall {
+  return { target: `${pkg}::telos_client::install_policy`, typeArguments: [], arguments: [{ object: telosClient }, { type: 'vector<u8>', value: packed }] };
+}
+
+/** `release_entry<coin>` before the deadline, or `expire_entry` after it, for a frozen withdrawal. */
+export function settleCall(kind: 'release' | 'expire', ids: { package: string; telosClient: string; vault: string; coinType: string }, artifact: any): MoveCall {
+  return {
+    target: `${ids.package}::vault::${kind}_entry`,
+    typeArguments: kind === 'release' ? [ids.coinType] : [],
+    arguments: [{ object: ids.vault }, { object: ids.telosClient }, ...typed(PROOF_TYPES, proofArgs(artifact)), { object: SUI_CLOCK }],
+  };
+}
