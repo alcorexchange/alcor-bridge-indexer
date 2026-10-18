@@ -32,6 +32,7 @@ import type { ShipBlock } from './ship.ts';
 import type { ActionTrace } from './traces.ts';
 import type { PolicyTracker } from './finality.ts';
 import type { FinalizerPolicy } from './policyDiff.ts';
+import { timestampToSlot } from '../proof/pack.ts';
 import { parseQcExtension, QC_EXTENSION_ID } from './qc.ts';
 import { buildReleaseProof, submitRootArgs, type ReleaseProof } from './withdrawalProof.ts';
 
@@ -130,6 +131,15 @@ export async function assembleWithdrawalArtifact(
   };
   const slotOf = (n: number) => carrierOf(n).latest_qc_claim_timestamp;
   const digestOf = (n: number) => carrierOf(n).latest_qc_claim_finality_digest;
+  /**
+   * The parent's slot. A certificate may skip a block — none in the window then
+   * claims it, and freezing such a burn failed. The slot is only a timestamp,
+   * so the block's own header says it as well.
+   */
+  const parentSlotOf = async (n: number) => {
+    if (window.some((b) => b.finality_data?.latest_qc_claim_block_num === n)) return slotOf(n);
+    return timestampToSlot(chain, (await input.rawBlock(n)).timestamp);
+  };
 
   const fdBurn = at.get(burn)?.finality_data;
   if (!fdBurn) throw new Error(`no finality data for the burn block ${burn}`);
@@ -138,7 +148,7 @@ export async function assembleWithdrawalArtifact(
     chain,
     traces: input.traces,
     bridgeAccount: input.bridgeAccount,
-    block: { number: burn, timestamp: slotOf(burn), parentTimestamp: slotOf(burn - 1) },
+    block: { number: burn, timestamp: slotOf(burn), parentTimestamp: await parentSlotOf(burn - 1) },
     finalityData: fdBurn,
     finalityDigest: digestOf(burn),
     tree,

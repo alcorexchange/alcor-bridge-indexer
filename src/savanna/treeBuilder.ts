@@ -473,7 +473,10 @@ export function buildTree(o: TreeBuildOptions): Promise<BuildResult> {
       ws.on('message', (data: Buffer) => {
         if (!abi) {
           abi = data.toString('utf8'); // the first message is the ABI, as JSON
-          const end = o.follow ? FOREVER : stopAt! + 2;
+          // A finite run reads past `to`: a block nobody has claimed yet waits for
+          // CLAIM_LEAD final blocks before its digest is computed, and asking for
+          // `to + 1` alone left such a run waiting on blocks it never requested.
+          const end = o.follow ? FOREVER : stopAt! + CLAIM_LEAD + 2;
           ws!.send(encodeRequest(startBlock, end, !!o.fetchTraces, IN_FLIGHT));
           return;
         }

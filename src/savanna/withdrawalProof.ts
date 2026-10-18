@@ -61,34 +61,51 @@ export type WdlogPayload = {
 };
 
 /**
+ * The address width of a `wdlog` proved by a frozen Savanna artifact: 20 bytes
+ * for an EVM chain, 32 for Sui. Null for an Antelope chain, whose relayer
+ * proves its own (vault 8, token 16, recipient 8).
+ */
+export function frozenAddressWidth(d: Uint8Array): 20 | 32 | null {
+  if (d.length > 16 && d[16] === 20) return 20;
+  if (d.length > 16 && d[16] === 32) return 32;
+  return null;
+}
+
+/**
  * Decode a `wdlog` action's data.
  *
  * Positional, because every field is fixed width except the three addresses
- * and the memo. The addresses carry the single-byte LEB128 length `0x14` that
- * `fc::raw::pack` writes for 20 bytes; the memo carries its own LEB128 length
- * and ends the payload exactly. The Solidity verifier rebuilds this layout, so
- * the two must change together — which is why the lengths are asserted rather
- * than skipped.
+ * and the memo. The addresses carry the single-byte LEB128 length `fc::raw::pack`
+ * writes — `0x14` for EVM's 20 bytes, `0x20` for Sui's 32, the same for all
+ * three; the memo carries its own LEB128 length and ends the payload exactly.
+ * The Solidity and Move verifiers rebuild this layout, so they must change
+ * together with it — which is why the lengths are asserted rather than skipped.
  */
 export function decodeWdlog(dataHex: string): WdlogPayload {
   const d = fromHex(dataHex);
-  const fixed = 8 + 8 + 1 + 20 + 1 + 20 + 1 + 20 + 8 + 8 + 8;
+  const w = frozenAddressWidth(d);
+  if (w === null) throw new Error('wdlog: expected a 20- or 32-byte length prefix before each address');
+  const a = 16; // vault prefix
+  const b = a + 1 + w; // token prefix
+  const c = b + 1 + w; // recipient prefix
+  const tail = c + 1 + w;
+  const fixed = tail + 8 + 8 + 8;
   if (d.length <= fixed) {
     throw new Error(`wdlog data is ${d.length} bytes, expected more than ${fixed}`);
   }
-  const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
-  if (d[16] !== 0x14 || d[37] !== 0x14 || d[58] !== 0x14) {
-    throw new Error('wdlog: expected a 20-byte length prefix before each address');
+  if (d[b] !== w || d[c] !== w) {
+    throw new Error(`wdlog: expected a ${w}-byte length prefix before each address`);
   }
+  const view = new DataView(d.buffer, d.byteOffset, d.byteLength);
   return {
     id: view.getBigUint64(0, true),
     domain: view.getBigUint64(8, true),
-    vault: toHex0x(d.subarray(17, 37)),
-    token: toHex0x(d.subarray(38, 58)),
-    recipient: toHex0x(d.subarray(59, 79)),
-    amount: view.getBigUint64(79, true),
-    deadline: view.getBigUint64(87, true),
-    fee: view.getBigUint64(95, true),
+    vault: toHex0x(d.subarray(a + 1, b)),
+    token: toHex0x(d.subarray(b + 1, c)),
+    recipient: toHex0x(d.subarray(c + 1, tail)),
+    amount: view.getBigUint64(tail, true),
+    deadline: view.getBigUint64(tail + 8, true),
+    fee: view.getBigUint64(tail + 16, true),
     memo: toHex0x(memoAt(d, fixed)),
   };
 }
@@ -105,11 +122,12 @@ export type BlockWdlog = {
   id: bigint;
   domain: bigint;
   /**
-   * Bound for an EVM chain: its addresses carry the 20-byte length prefix
-   * `decodeWdlog` asserts. One bound for an Antelope chain packs names there
-   * instead, is proved by that chain's relayer, and has no EVM proof to build.
+   * Proved by a frozen Savanna artifact: bound for an EVM chain or Sui, whose
+   * addresses carry the 20- or 32-byte length prefix `decodeWdlog` asserts. One
+   * bound for an Antelope chain packs names there instead, is proved by that
+   * chain's relayer, and has no artifact to freeze.
    */
-  evm: boolean;
+  frozen: boolean;
 };
 
 /**
@@ -135,7 +153,7 @@ export function blockWdlogs(traces: ActionTrace[], bridgeAccount: string): Block
         data: t.data,
         id: view.getBigUint64(0, true),
         domain: view.getBigUint64(8, true),
-        evm: d[16] === 0x14,
+        frozen: frozenAddressWidth(d) !== null,
       };
     });
 }

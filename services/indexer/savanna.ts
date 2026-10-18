@@ -303,10 +303,10 @@ export class SettlementFollower {
       if (e.kind === 'credit' && !e.memo) void this.markIfParked(e.domain, e.nonce);
     }
 
-    const evm = wdlogs.filter((w) => w.evm);
-    if (!evm.length) return;
-    console.log(`[savanna] block ${n}: ${evm.length} wdlog(s)`);
-    this.pending.set(n, { burn: n, wdlogs: evm, traces, firstSeen: n });
+    const frozen = wdlogs.filter((w) => w.frozen);
+    if (!frozen.length) return;
+    console.log(`[savanna] block ${n}: ${frozen.length} wdlog(s)`);
+    this.pending.set(n, { burn: n, wdlogs: frozen, traces, firstSeen: n });
   }
 
   private onPolicy(policy: FinalizerPolicy, block: number): void {
@@ -841,7 +841,7 @@ export class SettlementFollower {
       // one of those abort the block, and an EVM burn after it was never frozen.
       const w = blockWdlogs(traces, this.cfg.savanna.accounts.bridge).find((x) => x.id === BigInt(id));
       if (!w) throw new Error(`block ${burn} carries no wdlog for withdrawal ${id}`);
-      if (!w.evm) throw new Error(`withdrawal ${id} is bound for an Antelope chain; its relayer proves it`);
+      if (!w.frozen) throw new Error(`withdrawal ${id} is bound for an Antelope chain; its relayer proves it`);
 
       const artifact = await this.artifactFor(w, { burn, window, traces, tree, rootAtBurn: root });
       this.record(artifact, burn, w.trxId);

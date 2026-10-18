@@ -251,7 +251,7 @@ export function antelopeWdlog(dataHex: string) {
 /** The block's withdrawals bound for an Antelope chain, as events. */
 export function antelopeBurns(wdlogs: BlockWdlog[]): BridgeEvent[] {
   return wdlogs.flatMap((w) => {
-    const b = w.evm ? undefined : antelopeWdlog(w.data);
+    const b = w.frozen ? undefined : antelopeWdlog(w.data);
     return b ? [{ kind: 'burn' as const, ...b, trxId: w.trxId }] : [];
   });
 }

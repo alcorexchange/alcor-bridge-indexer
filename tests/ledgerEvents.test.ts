@@ -88,7 +88,7 @@ test('a block with WAX and EVM burns: one ordinal count, and only the EVM ones a
   // Delivered out of order: the count follows execution, not arrival.
   const wdlogs = blockWdlogs([...traces].reverse(), BRIDGE);
   assert.deepEqual(
-    wdlogs.map((w) => [w.ordinal, w.index, w.id, w.evm, w.trxId]),
+    wdlogs.map((w) => [w.ordinal, w.index, w.id, w.frozen, w.trxId]),
     [
       [0, 1, 41n, true, 'tx1'],
       [1, 2, 42n, false, 'tx2'],
