@@ -429,6 +429,7 @@ export class SettlementFollower {
         JSON.stringify({
           generation,
           block,
+          transitionBlock: h.transition,
           carrierBlock: h.carrierBlock,
           previousGeneration: h.previous.generation,
           submitRoot: h.args,
