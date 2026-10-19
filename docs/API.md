@@ -1419,7 +1419,7 @@ wallet sends to the vault, in order.
     "action": "release",
     "calls": [
       { "contract": "vault.alcor.near", "method": "register_key", "args": { "key": "<base64>", "pop": "<base64>" },
-        "deposit": "10000000000000000000000", "gas": "300000000000000" },
+        "deposit": "10000000000000000000000", "gas": "100000000000000" },
       { "contract": "vault.alcor.near", "method": "submit_root", "args": { "finality": { … }, "bits": "…", "signature": "…", "policy_keys": […],
         "pending_policy": null, "pending_bits": null, "pending_signature": null }, "deposit": "…", "gas": "…" },
       { "contract": "vault.alcor.near", "method": "release", "args": { "proof": { … }, "token": "NEAR", "recipient": "alice.near" },
@@ -1431,8 +1431,9 @@ wallet sends to the vault, in order.
 
 - Each call is a `FunctionCall` as near-api-js and the wallet selector take it:
   `args` JSON (byte strings base64), `deposit` in yoctoNEAR (0.01 NEAR: the
-  storage the call adds, the rest refunded), `gas` in gas units (300 Tgas, the
-  unused part refunded). Send them in this order, as separate transactions.
+  storage the call adds, the rest refunded), `gas` in gas units (100 Tgas, the
+  unused part refunded; the sender must hold it at the top gas price first,
+  ~0.1 NEAR). Send them in this order, as separate transactions.
 - `register_key` comes once per signer key the vault's client does not know
   yet, with its proof of possession from Telos's `regfinkey` history; anyone
   may send it. `submit_root` is left out when the root is already trusted.
