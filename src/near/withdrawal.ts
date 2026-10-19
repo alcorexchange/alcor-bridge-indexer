@@ -83,8 +83,13 @@ export type NearCall = { contract: string; method: string; args: Record<string, 
 
 /** 0.01 NEAR: more than any single call's storage; the vault refunds the rest. */
 export const CALL_DEPOSIT = '10000000000000000000000';
-/** 300 Tgas, the most a transaction may carry; what is not burnt is refunded. */
-export const CALL_GAS = '300000000000000';
+/**
+ * 100 Tgas. What is not burnt is refunded, but the sender must hold the whole
+ * amount at the network's highest price first: 300 Tgas asked for ~0.31 NEAR.
+ * The heaviest call measured is `set_policy` at 30 Tgas; a release with its
+ * callback and fee transfer reserves 50.
+ */
+export const CALL_GAS = '100000000000000';
 
 export const nearCallOf = (contract: string, method: string, args: Record<string, unknown>): NearCall =>
   ({ contract, method, args, deposit: CALL_DEPOSIT, gas: CALL_GAS });
