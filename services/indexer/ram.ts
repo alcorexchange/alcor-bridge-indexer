@@ -19,10 +19,11 @@ import { SETTLEMENT_CHAIN, type IndexerConfig } from './config.ts';
 export type RamRow = { chain: string; account: string; used: number; quota: number; free: number; alarmAt: number };
 
 /**
- * Below this many free bytes an account is an alarm: a few thousand rows, a day
- * of an attack or a long while of honest use. `RAM_ALARM_BYTES` overrides it.
+ * Below this many free bytes an account is an alarm: about a thousand rows,
+ * weeks of honest use at today's pace. `RAM_ALARM_BYTES` overrides it. It was
+ * 500 KB, sized on WAX, and kept XPR's and Vaulta's vaults alarmed for good.
  */
-export const RAM_ALARM_BYTES = Number(process.env.RAM_ALARM_BYTES ?? 500_000);
+export const RAM_ALARM_BYTES = Number(process.env.RAM_ALARM_BYTES ?? 250_000);
 
 /**
  * bridgeroute's bar: its orders are erased as they end, so what it spends for
@@ -103,9 +104,12 @@ export async function ramReport(cfg: IndexerConfig): Promise<RamRow[]> {
   return Promise.all(reads);
 }
 
-/** One line per account below the bar, for the health page's alarms. */
+/**
+ * One line per account below the bar, for the health page's alarms. The page
+ * is public, so it says what is low and by how much, not what could follow.
+ */
 export function ramAlarms(rows: RamRow[]): string[] {
   return rows
     .filter((r) => r.free < r.alarmAt)
-    .map((r) => `${r.account} on ${r.chain} has ${Math.round(r.free / 1024)} KB of RAM left — buy more before credits and withdrawals start failing`);
+    .map((r) => `${r.account} on ${r.chain}: ${Math.round(r.free / 1024)} KB of RAM left, under the ${Math.round(r.alarmAt / 1024)} KB of headroom it is kept at`);
 }
