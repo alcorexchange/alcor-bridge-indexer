@@ -24,6 +24,19 @@ async function txApi(near: NearSource, path: string, body: unknown): Promise<any
   return res.json();
 }
 
+/**
+ * The height FastNEAR has indexed the chain to. Its account history answers
+ * for blocks past that with fewer transactions and no error, so nothing past
+ * it may be read as complete.
+ */
+export async function indexedHeight(near: NearSource): Promise<number> {
+  const res = await fetch(`${near.txApi}/status`, { signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) throw new Error(`near: ${near.txApi}/status -> HTTP ${res.status}`);
+  const s = (await res.json()) as { latest_block_height?: number };
+  if (!Number.isSafeInteger(s.latest_block_height)) throw new Error(`near: ${near.txApi}/status names no height`);
+  return Number(s.latest_block_height);
+}
+
 /** Who signed each transaction: the RPC finds a transaction by its hash AND its signer. */
 async function signersOf(near: NearSource, hashes: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();

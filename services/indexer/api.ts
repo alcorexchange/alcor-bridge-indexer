@@ -1763,7 +1763,8 @@ async function nearWithdrawalProof(deps: Deps, row: TransferRow, artifact: Withd
   const learn = known.filter((_, i) => !knows[i]);
   const unknownSigners = [...signers].filter((id) => !known.some((r) => r.keyId.replace(/^0x/, '').toLowerCase() === id));
   const trusted = await isTrusted(near.rpc, route.vault, root.finality.finalityMroot);
-  const pastDeadline = row.deadline !== null && row.deadline <= Math.floor(Date.now() / 1000);
+  // The vault releases up to the deadline second and expires only after it.
+  const pastDeadline = row.deadline !== null && row.deadline < Math.floor(Date.now() / 1000);
 
   return {
     code: 200,

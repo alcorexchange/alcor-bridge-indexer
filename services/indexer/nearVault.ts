@@ -17,7 +17,7 @@
  * labels rows. The cursor (a block height) is kept in the store.
  */
 import { getTableRows } from '../../src/net/antelope.ts';
-import { nearVaultTxs } from '../../src/near/discover.ts';
+import { indexedHeight, nearVaultTxs } from '../../src/near/discover.ts';
 import { nearAddress } from '../../src/near/logs.ts';
 import { nearRpc } from '../../src/near/rpc.ts';
 import { uint64ToName } from '../../src/proof/pack.ts';
@@ -72,7 +72,8 @@ export async function followNearVault(cfg: IndexerConfig, store: Store, near: Ne
   const vault = route.vault;
 
   const head = Number((await nearRpc(near.rpc, 'block', { finality: 'final' })).header.height);
-  const to = head - SETTLE_BLOCKS;
+  // Not past what FastNEAR has indexed: beyond it the history is short, not missing.
+  const to = Math.min(head, await indexedHeight(near)) - SETTLE_BLOCKS;
   const cursorKey = `near:${near.chain.id}:${vault}:height`;
   const from = Number(store.getMeta(cursorKey) ?? 0) + 1;
   if (to < from) return 0;

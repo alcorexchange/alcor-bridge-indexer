@@ -67,7 +67,13 @@ function validatorStake(v: any): Buffer {
 /** borsh(Vec<ValidatorStakeView>), hex: a producer set as the light client takes it. */
 export const producersBytes = (bps: any[]) => hex(Buffer.concat([u32(bps.length), ...bps.map(validatorStake)]));
 
+/**
+ * The block's light view is the one Telos hashes: eight fields. nearcore's
+ * SPICE header adds `chunk_execution_root` to it; until Telos knows that shape,
+ * a block carrying one is refused here rather than sent to fail there.
+ */
 function innerLiteBytes(l: any): Buffer {
+  if (l.chunk_execution_root != null) throw new Error(`near: block ${l.height} has a chunk_execution_root; the light client does not know this header`);
   return Buffer.concat([
     u64(l.height), fromBase58(l.epoch_id), fromBase58(l.next_epoch_id), fromBase58(l.prev_state_root),
     fromBase58(l.outcome_root), u64(l.timestamp_nanosec ?? l.timestamp), fromBase58(l.next_bp_hash), fromBase58(l.block_merkle_root),
@@ -104,13 +110,19 @@ const path = (p: { hash: string; direction: string }[]) => p.map((s) => ({ hash:
 /**
  * The fewest approvals that clear two thirds, largest stakes first, sent in
  * index order. Nothing commits to the approvals a block carries, so the rest
- * are dropped: every signature costs CPU on Telos.
+ * are dropped: every signature costs CPU on Telos. `canSign` leaves out the
+ * producers whose key Telos cannot check (no key table there): one of them in
+ * the list would fail the whole head.
  */
-export function fewestApprovals(lc: any, producers: any[]): { index: number; signature: string }[] {
+export function fewestApprovals(
+  lc: any,
+  producers: any[],
+  canSign: (index: number) => boolean = () => true,
+): { index: number; signature: string }[] {
   const total = producers.reduce((a, p) => a + BigInt(p.stake), 0n);
   const signed = producers
     .map((p, i) => ({ i, stake: BigInt(p.stake), sig: lc.approvals_after_next[i] as string | null }))
-    .filter((x) => x.sig && x.sig.startsWith('ed25519:'))
+    .filter((x) => x.sig && x.sig.startsWith('ed25519:') && canSign(x.i))
     .sort((a, b) => (b.stake > a.stake ? 1 : b.stake < a.stake ? -1 : 0));
   let s = 0n;
   const out: typeof signed = [];
@@ -128,7 +140,7 @@ export const producersAt = (rpc: string[], blockHash: string): Promise<any[]> =>
   nearRpc(rpc, 'EXPERIMENTAL_validators_ordered', [blockHash]);
 
 /** `addhead`'s arguments for a light-client block (`next_light_client_block`). */
-export async function addheadArgs(rpc: string[], payer: string, lc: any) {
+export async function addheadArgs(rpc: string[], payer: string, lc: any, canSign?: (index: number) => boolean) {
   const hash = blockHashOf(lc);
   return {
     hash,
@@ -139,7 +151,7 @@ export async function addheadArgs(rpc: string[], payer: string, lc: any) {
       block: headerLite(lc),
       next_block_inner_hash: h(lc.next_block_inner_hash),
       next_bps: lc.next_bps ? producersBytes(lc.next_bps) : '',
-      approvals: fewestApprovals(lc, await producersAt(rpc, hash)),
+      approvals: fewestApprovals(lc, await producersAt(rpc, hash), canSign),
     },
   };
 }
