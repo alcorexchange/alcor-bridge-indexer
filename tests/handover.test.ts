@@ -1,6 +1,6 @@
 /**
- * Handover: the certified block of a rotation's window is P when anything
- * claims P, else P+1 — as at generation 195, where nothing claimed P.
+ * Handover: the certified block of a rotation's window is the first whose own
+ * claim reaches P — the one whose certificate makes the pending policy final.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,7 +22,7 @@ const blocks = (rows: [number, number, number, number][]): ShipBlock[] =>
 const numbers = (r: ReturnType<typeof certifiedTransition>) =>
   r && [r.transition.this_block.block_num, r.carrier.this_block.block_num];
 
-test('generation 195: nothing claims P, so P+1 and the block that claims it', () => {
+test('generation 195: P+1 skipped P, so P+2 and the block that claims it', () => {
   // Telos mainnet, 2026-10-17: 494430001 claimed 494429999, skipping P.
   const window = blocks([
     [494429999, 494429998, 194, 194],
@@ -32,16 +32,26 @@ test('generation 195: nothing claims P, so P+1 and the block that claims it', ()
     [494430003, 494430002, 195, 195],
     [494430004, 494430003, 195, 195],
   ]);
-  assert.deepEqual(numbers(certifiedTransition(window, 494430000)), [494430001, 494430002]);
+  assert.deepEqual(numbers(certifiedTransition(window, 494430000)), [494430002, 494430003]);
 });
 
-test('P claimed: P, as every rotation before 195', () => {
+test('an ordinary rotation: P+1, which claims P', () => {
   const window = blocks([
     [100, 99, 7, 8],
     [101, 100, 7, 8],
     [102, 101, 8, 8],
   ]);
-  assert.deepEqual(numbers(certifiedTransition(window, 100)), [100, 101]);
+  assert.deepEqual(numbers(certifiedTransition(window, 100)), [101, 102]);
+});
+
+test('P itself is never the block, claimed or not: it cannot settle its own policy', () => {
+  // 102 claims P, but no block of the window claims as far as P.
+  const window = blocks([
+    [100, 99, 7, 8],
+    [101, 99, 7, 8],
+    [102, 100, 8, 8],
+  ]);
+  assert.equal(certifiedTransition(window, 100), undefined);
 });
 
 test('a claim on a block where the policy is already active is not a handover', () => {

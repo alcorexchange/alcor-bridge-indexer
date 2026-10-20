@@ -1,24 +1,24 @@
 /**
  * The certificate that carries a finalizer-policy handover, assembled and checked.
  *
- * Telos opens a two-block window at every rotation:
+ * Telos opens a window at every rotation, usually two blocks:
  *
  *   block P      the new policy becomes PENDING here, and the block's finality
  *                digest commits to sha256 of it
- *   block P+1    same
+ *   block P+1    same; it claims P
  *   block P+2    the new policy becomes ACTIVE; the window has closed
  *
- * A certificate over P carries two halves, one by the generation still active
- * and one by the pending one, and Spring counts P final only if both reach their
- * threshold. `TelosLightClient.submitRoot` checks both, and in doing so records
- * what the successor hashes to — which is what `installPolicy` stands on.
+ * A certificate over a window block carries two halves, one by the generation
+ * still active and one by the pending one, and Spring counts the block final
+ * only if both reach their threshold. `TelosLightClient.submitRoot` checks both.
  *
- * P+1 does exactly as well: it too is a transition block, its digest commits to
- * the same pending policy with the same start (P's timestamp), and the light
- * clients ask only that the block be one. Some rotations need it: nothing ever
- * claimed 494430000, where generation 195 became pending — 494430001 claimed
- * 494429999 — while 494430002 claimed 494430001. A handover built from P alone
- * was impossible there, and every light client would have been stuck at 194.
+ * Which block: the first whose claim reaches P. A certificate makes final the
+ * block its block claims, so over P+1 it makes P final, and with it the pending
+ * policy. Over P it does not — a fork could still replace the policy — and the
+ * light clients then record nothing for `installPolicy` to stand on (ETH-Telos
+ * audit B-03). Some rotations run longer: nothing ever claimed 494430000, where
+ * generation 195 became pending — 494430001 claimed 494429999 — while 494430002
+ * claimed 494430001, so 494430002 is the block there.
  *
  * Two callers need exactly this and must not each have a copy: the script that
  * advances a light client, and the one that freezes the handover into a test
@@ -38,7 +38,7 @@ import { submitRootArgs, type SubmitRootArgs } from './withdrawalProof.ts';
 export type Handover = {
   /** P: where `next` became pending. */
   block: number;
-  /** The transition block the certificate claims: P, or P+1 when nothing claims P. */
+  /** The transition block the certificate claims: the first of the window whose own claim reaches P. */
   transition: number;
   /** The block whose certificate claims `transition`. */
   carrierBlock: number;
@@ -140,9 +140,16 @@ export async function assembleHandover(
 }
 
 /**
- * The first block of the window opened at `block` that a later block's
- * certificate claims, with that later block: P, else P+1. The window is the
- * run of blocks from P on whose policy is still pending and not yet active.
+ * The first block of the window opened at `block` that both settles the pending
+ * policy and is claimed by a later block's certificate, with that later block.
+ * The window is the run of blocks from P on whose policy is still pending and
+ * not yet active.
+ *
+ * Settles: its own claim reaches P. A strong certificate on a block makes final
+ * the block it claims, so only then is the pending policy final — before it a
+ * fork may still replace it, and the light clients record nothing to install
+ * ("pending policy not final yet", ETH-Telos audit B-03). P never qualifies, as
+ * it cannot claim itself; usually P+1 does, and P+2 at generation 195.
  */
 export function certifiedTransition(
   window: ShipBlock[],
@@ -156,6 +163,7 @@ export function certifiedTransition(
     if (b.this_block.block_num < block || !fd) continue;
     const pending = fd.last_pending_finalizer_policy_generation;
     if (pending !== opened.last_pending_finalizer_policy_generation || fd.active_finalizer_policy_generation === pending) break;
+    if (fd.latest_qc_claim_block_num < block) continue;
     const carrier = byNumber.find((c) => c.finality_data?.latest_qc_claim_block_num === b.this_block.block_num);
     if (carrier) return { transition: b, carrier };
   }
