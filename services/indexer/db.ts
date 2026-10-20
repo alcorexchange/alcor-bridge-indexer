@@ -735,6 +735,18 @@ export class Store {
     return this.db.prepare('SELECT * FROM swaps WHERE chain = ? AND id = ?').get(chain, id) as SwapRow | undefined;
   }
 
+  /**
+   * When the oldest order on `chain` was opened whose `opened` was stored from
+   * fields it does not have — `undefined` written as text: a Hyperion host's
+   * stale ABI, before hosts were checked. Undefined when there is none.
+   */
+  oldestMalformedSwap(chain: string): number | undefined {
+    const r = this.db
+      .prepare(`SELECT MIN(opened_at) AS at FROM swaps WHERE chain = ? AND (recipient = 'undefined' OR back = 'undefined')`)
+      .get(chain) as { at: number | null };
+    return r.at ?? undefined;
+  }
+
   /** The order a payout made, by the payout's transaction. */
   swapByPayout(tx: string): SwapRow | undefined {
     return this.db.prepare('SELECT * FROM swaps WHERE payout_tx = ?').get(tx) as SwapRow | undefined;

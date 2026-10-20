@@ -16,6 +16,10 @@
  *
  * The contract erases an order when it ends; Hyperion keeps both actions, so
  * they are read from there, a page at a time, behind a cursor per chain.
+ *
+ * An action is stored only in the shape the contract declares. A Hyperion host
+ * with a stale ABI once served `opened` with other fields; it is passed over,
+ * and a row it wrote is read again.
  */
 
 import { ANTELOPE_SWAPS, ROUTE_MEMO } from '../../src/chains/swaps.ts';
@@ -58,6 +62,17 @@ type ExtendedAsset = { quantity: string; contract: string };
 /** `<quantity>@<contract>`, as the memos write a token and an amount of it. */
 const written = (a: ExtendedAsset): string => `${a.quantity}@${a.contract}`;
 
+const isText = (v: unknown): v is string => typeof v === 'string';
+const isTokens = (v: any): boolean => isText(v?.quantity) && isText(v?.contract);
+
+/** `opened` as bridgeroute declares it: id, to, back, in, least, deadline. */
+export const wellFormedOpened = (d: Record<string, any>): boolean =>
+  d.id !== undefined && isText(d.to) && isText(d.back) && isTokens(d.in) && isTokens(d.least) && isText(d.deadline);
+
+/** `closed` as bridgeroute declares it: id, outcome, paid[{ to, tokens }]. */
+export const wellFormedClosed = (d: Record<string, any>): boolean =>
+  d.id !== undefined && isText(d.outcome) && Array.isArray(d.paid) && d.paid.every((p: any) => isText(p?.to) && isTokens(p?.tokens));
+
 /** Unix seconds of an Antelope time, written with or without a zone and milliseconds. */
 const seconds = (time: string): number => Math.floor(Date.parse(/Z$|[+-]\d\d:\d\d$/.test(time) ? time : `${time}Z`) / 1000);
 
@@ -70,29 +85,35 @@ export function applySwapActions(store: Store, chain: string, opened: HistoryAct
   let fresh = 0;
   for (const a of opened) {
     const d = a.act.data;
-    if (store.swapOf(chain, Number(d.id))?.least) continue;
-    fresh++;
-    store.putSwapOpened({
+    if (!wellFormedOpened(d)) continue;
+    const row = {
       chain,
       id: Number(d.id),
       payout_tx: a.trx_id,
-      recipient: String(d.to),
-      back: String(d.back),
+      recipient: d.to,
+      back: d.back,
       input: written(d.in),
       least: written(d.least),
-      deadline: seconds(String(d.deadline)),
+      deadline: seconds(d.deadline),
       opened_at: seconds(a.timestamp),
-    });
+    };
+    // Written again when what is stored differs: a row from a stale-ABI host is corrected.
+    const stored = store.swapOf(chain, row.id);
+    if (stored && stored.payout_tx === row.payout_tx && stored.recipient === row.recipient && stored.back === row.back &&
+        stored.input === row.input && stored.least === row.least && stored.deadline === row.deadline) continue;
+    fresh++;
+    store.putSwapOpened(row);
   }
   for (const a of closed) {
     const d = a.act.data;
+    if (!wellFormedClosed(d)) continue;
     if (store.swapOf(chain, Number(d.id))?.outcome) continue;
     fresh++;
     store.putSwapClosed({
       chain,
       id: Number(d.id),
-      outcome: String(d.outcome),
-      paid: (d.paid as { to: string; tokens: ExtendedAsset }[]).map((p) => ({ to: String(p.to), asset: written(p.tokens) })),
+      outcome: d.outcome,
+      paid: (d.paid as { to: string; tokens: ExtendedAsset }[]).map((p) => ({ to: p.to, asset: written(p.tokens) })),
       tx: a.trx_id,
       at: seconds(a.timestamp),
     });
@@ -122,10 +143,12 @@ async function followChain(store: Store, c: SwapChain): Promise<number> {
   const key = `swaps:${c.chain}`;
   const now = Math.floor(Date.now() / 1000);
   const cursor = store.getNumber(key) ?? now - FIRST_LOOK_SECONDS;
-  const after = cursor - OVERLAP_SECONDS;
+  // A row a stale-ABI host wrote (before hosts were checked) is read again from its own time.
+  const broken = store.oldestMalformedSwap(c.chain);
+  const after = Math.min(cursor - OVERLAP_SECONDS, broken === undefined ? Infinity : broken - OVERLAP_SECONDS);
   const [opened, closed] = await Promise.all([
-    hyperionActions(c.history, c.account, 'opened', after),
-    hyperionActions(c.history, c.account, 'closed', after),
+    hyperionActions(c.history, c.account, 'opened', after, wellFormedOpened),
+    hyperionActions(c.history, c.account, 'closed', after, wellFormedClosed),
   ]);
   const recorded = applySwapActions(store, c.chain, opened, closed);
   const newest = Math.max(cursor, now - QUIET_LOOK_SECONDS, ...[...opened, ...closed].map((a) => seconds(a.timestamp)));

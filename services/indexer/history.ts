@@ -37,12 +37,20 @@ export type HistoryAction = {
   act: { name: string; data: Record<string, any> };
 };
 
-/** Every `account::action` after `after`, from the first Hyperion host that answers. */
+/**
+ * Every `account::action` after `after`, from the first Hyperion host that
+ * answers — and answers in the shape `wellFormed` expects. A host decodes an
+ * action with the ABI it has cached for the contract, and one that missed a
+ * `setabi` serves the old fields over the new bytes: plausible-looking garbage
+ * (route.alcor's `opened` on mainnet.telos.net, 2026-10-20). Such a host is
+ * passed over like one that is down.
+ */
 export async function hyperionActions(
   hosts: string[],
   account: string,
   action: string,
   afterSeconds: number,
+  wellFormed: (data: Record<string, any>) => boolean = () => true,
 ): Promise<HistoryAction[]> {
   if (!hosts.length) throw new Error('no Hyperion endpoint configured');
   const after = new Date(afterSeconds * 1000).toISOString();
@@ -56,6 +64,8 @@ export async function hyperionActions(
           `&filter=${account}:${action}&after=${after}&sort=asc&limit=${PAGE}&skip=${skip}`;
         const body = (await fetchJson(url)) as { actions?: HistoryAction[] };
         if (!Array.isArray(body.actions)) throw new Error('no actions array');
+        const odd = body.actions.find((a) => !wellFormed(a.act?.data ?? {}));
+        if (odd) throw new Error(`decodes ${action} in ${odd.trx_id} with another ABI: ${JSON.stringify(odd.act?.data).slice(0, 120)}`);
         out.push(...body.actions);
         if (body.actions.length < PAGE) return out;
       }

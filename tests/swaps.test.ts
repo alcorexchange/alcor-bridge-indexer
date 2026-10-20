@@ -10,11 +10,13 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import { Store } from '../services/indexer/db.ts';
-import { applySwapActions, swapOfPayout } from '../services/indexer/swaps.ts';
+import { applySwapActions, swapOfPayout, wellFormedOpened } from '../services/indexer/swaps.ts';
 import { evmSwapQuote, QuoteRefused } from '../services/indexer/quote.ts';
-import type { HistoryAction } from '../services/indexer/history.ts';
+import { hyperionActions, type HistoryAction } from '../services/indexer/history.ts';
 
 const action = (name: string, trx: string, timestamp: string, data: Record<string, unknown>): HistoryAction => ({
   block_num: 1,
@@ -163,4 +165,75 @@ test('a hop ending in a swap is found by the swap\'s recipient, before and after
   assert.deepEqual(store.hopDeposits({ hop: 'hop.alcor', party: 'erin' }), [dKey]);
   assert.deepEqual(store.hopDeposits({ hop: 'hop.alcor', party: 'route.alcor' }), [dKey]);
   assert.deepEqual(store.hopDeposits({ hop: 'hop.alcor', party: 'ammprovide' }), [], 'not a prefix match');
+});
+
+// ---- a Hyperion host with a stale ABI (route.alcor on mainnet.telos.net, 2026-10-20) ----
+
+/** `opened` of d:1:59 as mainnet.telos.net decoded it, with an ABI from before `to` and `back`. */
+const STALE_OPENED = action('opened', '9a6ebc01', '2026-10-20T01:35:47.000', {
+  id: '1',
+  recipient: 'idmrotfnhxq.g',
+  in: { quantity: '0.000000000000000000000000000004193181330767491439 x0d2cdc', contract: 'alkqegv4gks3a' },
+  least: { quantity: '0.0000000000000000000000000000000004050479003054072929 ac006a0', contract: 'glm34i1pakva1' },
+  deadline: '2011-07-15T12:45:26.000',
+});
+/** The same action as telos.eosusa.io decoded it. */
+const GOOD_OPENED = action('opened', '9a6ebc01', '2026-10-20T01:35:47.000', {
+  id: '1',
+  to: 'losezero1234',
+  back: '1:0x0d2cdc60dd3ea4ad7c11684ac006a0a64582ddf6',
+  in: { quantity: '0.00020000 ETH', contract: 'wrap.alcor' },
+  least: { quantity: '27.0064 TLOS', contract: 'eosio.token' },
+  deadline: '2026-10-20T01:42:39.000',
+});
+
+test('an action in a shape the contract does not declare is not stored', () => {
+  const store = new Store(':memory:');
+  assert.equal(wellFormedOpened(STALE_OPENED.act.data), false);
+  assert.equal(wellFormedOpened(GOOD_OPENED.act.data), true);
+  assert.equal(applySwapActions(store, 'telos', [STALE_OPENED], []), 0);
+  assert.equal(store.swapOf('telos', 1), undefined);
+});
+
+test('a row a stale-ABI host wrote is found, read again, and corrected', () => {
+  const store = new Store(':memory:');
+  // What the indexer stored before hosts were checked: String(undefined) for the missing fields.
+  store.putSwapOpened({
+    chain: 'telos', id: 1, payout_tx: '9a6ebc01', recipient: 'undefined', back: 'undefined',
+    input: '0.000000000000000000000000000004193181330767491439 x0d2cdc@alkqegv4gks3a',
+    least: '0.0000000000000000000000000000000004050479003054072929 ac006a0@glm34i1pakva1',
+    deadline: 1310733926, opened_at: 1792458947,
+  });
+  assert.equal(store.oldestMalformedSwap('telos'), 1792458947);
+  assert.equal(store.oldestMalformedSwap('wax'), undefined);
+
+  assert.equal(applySwapActions(store, 'telos', [GOOD_OPENED], []), 1);
+  const swap = swapOfPayout(store, '9a6ebc01')!;
+  assert.deepEqual([swap.to, swap.back, swap.input], ['losezero1234', '1:0x0d2cdc60dd3ea4ad7c11684ac006a0a64582ddf6', '0.00020000 ETH@wrap.alcor']);
+  assert.equal(swap.deadline, Date.UTC(2026, 9, 20, 1, 42, 39) / 1000);
+  assert.equal(store.oldestMalformedSwap('telos'), undefined);
+  assert.equal(applySwapActions(store, 'telos', [GOOD_OPENED], []), 0, 'the same action again changes nothing');
+});
+
+test('a Hyperion host serving the wrong shape is passed over for the next', async () => {
+  const serve = (actions: HistoryAction[]) =>
+    new Promise<{ url: string; close: () => void }>((resolve) => {
+      const server = createServer((_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ actions }));
+      }).listen(0, '127.0.0.1', () => {
+        const { port } = server.address() as AddressInfo;
+        resolve({ url: `http://127.0.0.1:${port}`, close: () => server.close() });
+      });
+    });
+  const stale = await serve([STALE_OPENED]);
+  const good = await serve([GOOD_OPENED]);
+  try {
+    const got = await hyperionActions([stale.url, good.url], 'route.alcor', 'opened', 0, wellFormedOpened);
+    assert.equal(got[0].act.data.to, 'losezero1234');
+    await assert.rejects(hyperionActions([stale.url], 'route.alcor', 'opened', 0, wellFormedOpened), /another ABI/);
+  } finally {
+    stale.close();
+    good.close();
+  }
 });
