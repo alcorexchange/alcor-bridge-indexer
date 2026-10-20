@@ -103,7 +103,7 @@ Those are different accounts on different chains.
 | contract | address |
 |---|---|
 | AlcorVault | `0x53f18eaa8bf8099b5ba21bb7e11ed311b677690e` |
-| AlcorWithdrawals | `0x6132b4d02e02f1b378f0fc67c3d4f553eb76acb5` |
+| AlcorWithdrawals | `0xef672a458d71d170edd2f2735da2dd5ebc8278b8` |
 | native BNB | `0x0000000000000000000000000000000000000000` (use `depositNative`) |
 
 **Don't hardcode the withdrawal contract in the release path.** Every proof

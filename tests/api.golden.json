@@ -1471,12 +1471,12 @@
      "behind": null,
      "lightClient": {
       "account": "bsc.lc.alcor",
-      "contract": "0x4b956b92c8aedc1f3f47243396ed53828c163b46"
+      "contract": "0x9ffbd7e850aca88141591fc2528c6091e162ce0a"
      },
      "gateway": "bsc.g.alcor",
      "contracts": {
       "vault": "0x53f18eaa8bf8099b5ba21bb7e11ed311b677690e",
-      "withdrawals": "0x6132b4d02e02f1b378f0fc67c3d4f553eb76acb5"
+      "withdrawals": "0xef672a458d71d170edd2f2735da2dd5ebc8278b8"
      },
      "upkeep": null,
      "timing": {

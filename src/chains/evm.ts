@@ -149,8 +149,8 @@ export const EVM_CHAINS: Record<string, EvmChain> = {
     //
     // Deployed 2026-10-03.
     vault: '0x53f18eaa8bf8099b5ba21bb7e11ed311b677690e',
-    lightClient: '0x4b956b92c8aedc1f3f47243396ed53828c163b46',
-    withdrawals: '0x6132b4d02e02f1b378f0fc67c3d4f553eb76acb5',
+    lightClient: '0x9ffbd7e850aca88141591fc2528c6091e162ce0a',
+    withdrawals: '0xef672a458d71d170edd2f2735da2dd5ebc8278b8',
     nativeToken: '0x0000000000000000000000000000000000000000',
     nativeSymbol: 'BNB',
     blockTime: 0.45,
