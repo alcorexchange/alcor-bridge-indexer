@@ -734,7 +734,7 @@ sender vouches for nothing.
     {
       "chain": "mainnet",
       "name": "Ethereum",
-      "lightClient": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
+      "lightClient": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651",
       "known": 29,
       "missing": [
         {
@@ -742,7 +742,7 @@ sender vouches for nothing.
           "keyId": "0xa0e0c440…",
           "inPolicy": false,
           "registerKey": {
-            "to": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
+            "to": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651",
             "signature": "registerKey(bytes,bytes)",
             "args": ["0x<96-byte key>", "0x<192-byte proof of possession>"],
             "gas": 470000
@@ -786,7 +786,7 @@ the sender vouches for nothing and only pays gas.
     {
       "chain": "mainnet",
       "name": "Ethereum",
-      "lightClient": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
+      "lightClient": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651",
       "policy": {
         "held": 151,
         "active": 152,
@@ -797,13 +797,13 @@ the sender vouches for nothing and only pays gas.
             "generation": 152,
             "telosBlock": 491407774,
             "submitRoot": {
-              "to": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
+              "to": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651",
               "signature": "submitRoot((uint32,…),bytes,bytes,bytes32[],(bytes,bytes,bytes))",
               "args": { "finality": { "…": "…" }, "bits": "0x…", "signature": "0x…", "policyKeys": ["0x…"], "pending": { "policy": "0x…", "bits": "0x…", "signature": "0x…" } },
               "gas": 2200000
             },
             "installPolicy": {
-              "to": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
+              "to": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651",
               "signature": "installPolicy(bytes)",
               "args": ["0x<packed policy>"],
               "gas": 400000

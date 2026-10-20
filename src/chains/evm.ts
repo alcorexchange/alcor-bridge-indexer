@@ -124,10 +124,11 @@ export const EVM_CHAINS: Record<string, EvmChain> = {
     // The chain's `genesis_time`, as publicnode and Lodestar both serve it —
     // not MIN_GENESIS_TIME (1_606_824_000), which it trails by 23 seconds.
     beaconGenesisTime: 1_606_824_023,
-    // The production set, deployed 2026-09-29 against bridge.alcor.
+    // The production set, deployed 2026-09-29 against bridge.alcor; light client
+    // and verifier replaced 2026-10-20 (ETH-Telos audit B-03/B-07).
     vault: '0x3e447d533321ad6a8412f97034ac295a9ff8d858',
-    lightClient: '0xd8f46a549747ab690eeeef0c327e42060cbb3b00',
-    withdrawals: '0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6',
+    lightClient: '0xd6716330ce88b83b4d35b516e5b0abc2536c5651',
+    withdrawals: '0xb0a50dd6d0be3bfc089e0f92fa4605bb495584cd',
     nativeToken: '0x0000000000000000000000000000000000000000',
     nativeSymbol: 'ETH',
     blockTime: 12,

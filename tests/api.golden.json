@@ -1199,8 +1199,8 @@
    "deadline": 1800086400,
    "hard": {
     "gas": "~2.4M + 176k",
-    "submitRootTo": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
-    "releaseTo": "0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6",
+    "submitRootTo": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651",
+    "releaseTo": "0xb0a50dd6d0be3bfc089e0f92fa4605bb495584cd",
     "submitRoot": {
      "finality": {
       "activeGeneration": 1,
@@ -1236,8 +1236,8 @@
    "deadline": 1800086400,
    "hard": {
     "gas": "~2.4M + 176k",
-    "submitRootTo": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00",
-    "releaseTo": "0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6",
+    "submitRootTo": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651",
+    "releaseTo": "0xb0a50dd6d0be3bfc089e0f92fa4605bb495584cd",
     "submitRoot": {
      "finality": {
       "activeGeneration": 1,
@@ -1373,12 +1373,12 @@
      "behind": 15,
      "lightClient": {
       "account": "eth.lc.alcor",
-      "contract": "0xd8f46a549747ab690eeeef0c327e42060cbb3b00"
+      "contract": "0xd6716330ce88b83b4d35b516e5b0abc2536c5651"
      },
      "gateway": "eth.g.alcor",
      "contracts": {
       "vault": "0x3e447d533321ad6a8412f97034ac295a9ff8d858",
-      "withdrawals": "0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6"
+      "withdrawals": "0xb0a50dd6d0be3bfc089e0f92fa4605bb495584cd"
      },
      "upkeep": null,
      "timing": {

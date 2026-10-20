@@ -93,7 +93,7 @@ Those are different accounts on different chains.
 | contract | address |
 |---|---|
 | AlcorVault (deposit here) | `0x3e447d533321ad6a8412f97034ac295a9ff8d858` |
-| AlcorWithdrawals (release here) | `0x04fb700b93eb68cadd88d8e8d4dfe4857d5cb3c6` |
+| AlcorWithdrawals (release here) | `0xb0a50dd6d0be3bfc089e0f92fa4605bb495584cd` |
 | USDC | `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48` |
 | USDT | `0xdac17f958d2ee523a2206206994597c13d831ec7` |
 | native ETH | `0x0000000000000000000000000000000000000000` (use `depositNative`) |
