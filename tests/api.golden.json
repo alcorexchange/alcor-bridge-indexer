@@ -1569,12 +1569,12 @@
      "behind": null,
      "lightClient": {
       "account": "pol.lc.alcor",
-      "contract": "0x38f3118ca7e2bfe9e1c1b8d15071fb47cdbae3dd"
+      "contract": "0x19282e8768062c090f1bf01c6f2c6e5d36fa7d54"
      },
      "gateway": "pol.g.alcor",
      "contracts": {
       "vault": "0x15bbd21148f98c4daeb30450eb05666f7859993d",
-      "withdrawals": "0xb0510e20f12f88cbc63b9a5d8ae3e052a7153fb8"
+      "withdrawals": "0x46b078ae68fe63b647879d9267c5233fb2c2a532"
      },
      "upkeep": null,
      "timing": {

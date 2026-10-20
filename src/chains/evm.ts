@@ -184,8 +184,8 @@ export const EVM_CHAINS: Record<string, EvmChain> = {
     },
     // Deployed 2026-10-07.
     vault: '0x15bbd21148f98c4daeb30450eb05666f7859993d',
-    lightClient: '0x38f3118ca7e2bfe9e1c1b8d15071fb47cdbae3dd',
-    withdrawals: '0xb0510e20f12f88cbc63b9a5d8ae3e052a7153fb8',
+    lightClient: '0x19282e8768062c090f1bf01c6f2c6e5d36fa7d54',
+    withdrawals: '0x46b078ae68fe63b647879d9267c5233fb2c2a532',
     nativeToken: '0x0000000000000000000000000000000000000000',
     nativeSymbol: 'POL',
     // 1.5 s, measured over 500 blocks 2026-09-22. Was 2 here, which is what Bor
