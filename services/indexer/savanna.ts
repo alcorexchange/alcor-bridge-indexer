@@ -79,6 +79,11 @@ const FRONTIER_EVERY_MS = 15_000;
  * the certificate that claims it rides a few blocks later, and the handover
  * reads a window of eight past it.
  */
+/** Whether a stored handover's certificate makes its policy final: its claim reaches P. */
+function settlesPolicy(h: { submitRoot: { finality: { qcClaimTimestamp: number; lastPendingPolicyStart: number } } }): boolean {
+  return h.submitRoot.finality.qcClaimTimestamp >= h.submitRoot.finality.lastPendingPolicyStart;
+}
+
 const HANDOVER_DELAY = 12;
 
 type Pending = {
@@ -415,7 +420,12 @@ export class SettlementFollower {
    * than that can only catch up from what is stored here.
    */
   private async freezeHandover(generation: number, block: number): Promise<boolean> {
-    if (this.store.getHandover(generation)) return true;
+    // One stored before 2026-10-20 may be the certificate over P itself, whose
+    // claim does not reach P: the policy it names is not final there, and the
+    // light clients now record nothing from it (ETH-Telos audit B-03). Built
+    // again while state-history still holds the window; kept as it is if not.
+    const existing = this.store.getHandover(generation);
+    if (existing && settlesPolicy(JSON.parse(existing.body))) return true;
     const stored = this.store.getPolicy(generation);
     if (!stored) return false;
     try {
@@ -423,22 +433,22 @@ export class SettlementFollower {
         this.policyFor(g, block),
       );
       if (!h.check.ok) throw new Error(`certificate in block ${h.carrierBlock} refused: ${h.check.reason}`);
-      this.store.putHandover(
+      const body = JSON.stringify({
         generation,
         block,
-        JSON.stringify({
-          generation,
-          block,
-          transitionBlock: h.transition,
-          carrierBlock: h.carrierBlock,
-          previousGeneration: h.previous.generation,
-          submitRoot: h.args,
-        }),
-      );
-      console.log(`[savanna] handover to generation ${generation} stored (block ${block})`);
+        transitionBlock: h.transition,
+        carrierBlock: h.carrierBlock,
+        previousGeneration: h.previous.generation,
+        submitRoot: h.args,
+      });
+      if (existing) this.store.replaceHandover(generation, block, body);
+      else this.store.putHandover(generation, block, body);
+      console.log(`[savanna] handover to generation ${generation} ${existing ? 'rebuilt' : 'stored'} (block ${block}, certified ${h.transition})`);
       return true;
     } catch (err) {
       this.handoversFailed.add(generation);
+      // An old one past state-history stays as it was: nothing to report again.
+      if (existing) return true;
       // The generation it hands over FROM was published before what state-history
       // holds: permanent, and nothing here can change it. Said once, not filed.
       if (err instanceof BeforeRetention) {

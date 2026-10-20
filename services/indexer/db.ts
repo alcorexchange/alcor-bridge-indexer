@@ -934,6 +934,11 @@ export class Store {
       .run(generation, block, body);
   }
 
+  /** Overwrite a stored handover with a better one for the same generation. */
+  replaceHandover(generation: number, block: number, body: string): void {
+    this.db.prepare('UPDATE handovers SET block = ?, body = ? WHERE generation = ?').run(block, body, generation);
+  }
+
   getHandover(generation: number): { block: number; body: string } | undefined {
     return this.db.prepare('SELECT block, body FROM handovers WHERE generation = ?').get(generation) as
       | { block: number; body: string }
