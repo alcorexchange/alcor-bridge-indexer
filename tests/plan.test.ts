@@ -287,3 +287,57 @@ test('the recipient must take the delivery: an account that exists, not the brid
   const toVault = await swapPlan(ask({ recipient: vault.toUpperCase().replace('0X', '0x') }), ctx(pool108, { chains: bscVault }));
   assert.match((toVault as { reason: string }).reason, /bridge's own account on BNB Smart Chain/);
 });
+
+const SUI = '3856007665771390095';
+const NEAR = '14338890689662875897';
+const SUI_USER = `0x${'5a'.repeat(32)}`;
+const SUI_USDC = '0xdba3::usdc::USDC';
+/** sha256("alice.near"), as the NEAR vault spells the account on Telos. */
+const ALICE_NEAR = '0x2dd5dda540767b3a1aa33544bcba38042f4df6de9bddb46798b29481c842c558';
+const thirtyTwo: PlanChain[] = [
+  ...chains,
+  { id: 'sui', name: 'Sui', kind: 'sui', domain: SUI, contracts: { vault: '0x9ed7' }, timing: { deposit: { seconds: 20 }, withdrawal: { seconds: 30 } } },
+  { id: 'near', name: 'NEAR', kind: 'near', domain: NEAR, contracts: { vault: 'alcor-bridge.near' }, timing: { deposit: { seconds: 8 }, withdrawal: { seconds: 25 } } },
+];
+const thirtyTwoRoutes: PlanRoute[] = [
+  ...routes,
+  route('USDC', 6, 'sui', 'telos', '1000000', null, { deposit: { token: null, coinType: SUI_USDC } }),
+  route('USDC', 6, 'telos', 'sui', '1000000', null),
+  route('USDT', 6, 'near', 'telos', '1000000', null, { deposit: { token: null, nearToken: 'usdt.tether-token.near' } }),
+  route('USDT', 6, 'telos', 'near', '1000000', null),
+  ...both('USDC', 6, 'wax', '1000000', 'wrap.alcor'),
+  hop('USDC', 6, 'sui', 'xpr', '1000000'),
+];
+
+test('from Sui: USDC hopped to XPR and swapped into XPR there; the deposit names the coin type', async () => {
+  const quote = quoter({ 'xpr usdc-wrap.alcor xpr-eosio.token': swapOf('3600.0000', 4, [11710]) });
+  const plan = await swapPlan(ask({ from: 'sui:USDC', to: 'xpr:XPR', amount: '10', sender: SUI_USER.toUpperCase().replace('0X', '0x'), recipient: 'bob' }),
+    ctx(quote, { chains: thirtyTwo, routes: thirtyTwoRoutes }));
+  assert.equal(plan.possible, true);
+  if (!plan.possible) return;
+  assert.equal(plan.memo, `bob|3582.0000 XPR@eosio.token|${DEADLINE}`);
+  assert.deepEqual(plan.sign, {
+    kind: 'deposit', chain: 'sui', vault: '0x9ed7', token: null, coinType: SUI_USDC,
+    telosTo: 'hop.alcor', refundTo: SUI_USER, memo: `${XPR}:route.alcor|${SUI}:${SUI_USER}|${plan.memo}`,
+  });
+  assert.equal(plan.release, 'relayer');
+});
+
+test('to NEAR: WAX USDC swapped into USDT on Telos, delivered to the sha256 of the account id', async () => {
+  const quote = quoter({ 'telos usdc-wrap.alcor usdt-wrap.alcor': swapOf('9.990000', 6, [118]) });
+  const plan = await swapPlan(ask({ from: 'wax:USDC', to: 'near:USDT', amount: '10', sender: 'alice', recipient: 'alice.near' }),
+    ctx(quote, { chains: thirtyTwo, routes: thirtyTwoRoutes }));
+  assert.equal(plan.possible, true);
+  if (!plan.possible) return;
+  assert.equal(plan.memo, `${NEAR}:${ALICE_NEAR}|9.940050 USDT@wrap.alcor|${DEADLINE}|${WAX}:alice`);
+  assert.equal(plan.to.recipient, 'alice.near');
+  assert.equal(plan.release, 'user');
+
+  const nowhere = await swapPlan(ask({ from: 'wax:USDC', to: 'near:USDT', amount: '10', sender: 'alice', recipient: 'nobody1' }),
+    ctx(quote, { chains: thirtyTwo, routes: thirtyTwoRoutes }));
+  assert.deepEqual(nowhere, { possible: false, reason: 'nobody1 does not exist on NEAR: create the account first' });
+  await assert.rejects(swapPlan(ask({ from: 'wax:USDC', to: 'near:USDT', amount: '10', sender: 'alice', recipient: 'Alice.NEAR' }),
+    ctx(quote, { chains: thirtyTwo, routes: thirtyTwoRoutes })), /NEAR account id/);
+  await assert.rejects(swapPlan(ask({ from: 'sui:USDC', to: 'xpr:XPR', amount: '10', sender: `0x${'0'.repeat(64)}`, recipient: 'bob' }),
+    ctx(quote, { chains: thirtyTwo, routes: thirtyTwoRoutes })), /non-zero 0x address/);
+});

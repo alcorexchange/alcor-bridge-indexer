@@ -331,3 +331,25 @@ test('routes: a full spoke closes the way out, and an empty one the way home', (
   assert.deepEqual([home.open, home.reason], [false, 'no USDC mirror is out on WAX to bring back']);
   assert.equal(none.find((r) => r.from === 'wax' && r.to === 'mainnet').reason, 'no USDC mirror is out on WAX to bring back');
 });
+
+test('routes: Sui and NEAR hop like any chain, the deposit naming the coin, the memo the 32-byte way back', () => {
+  const SUI = '3856007665771390095';
+  const NEAR = '14338890689662875897';
+  const sui = { id: 'sui', name: 'Sui', kind: 'sui', domain: SUI, active: { deposits: true, withdrawals: true },
+    routes: [usdc({ coinType: '0xdba3::usdc::USDC', withdrawMemo: `${SUI}:0x<recipient>` })] };
+  const near = { id: 'near', name: 'NEAR', kind: 'near', domain: NEAR, active: { deposits: true, withdrawals: true },
+    routes: [usdc({ nearToken: '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1', withdrawMemo: `${NEAR}:0x<sha256 of the NEAR account id>` })] };
+  const all = routesBetween([sui, near, wax], telos, { account: HOP, deployed: true }) as any[];
+  const pair = (from: string, to: string) => all.find((r) => r.from === from && r.to === to && r.via);
+
+  assert.deepEqual(pair('sui', 'wax').how, { deposit: { coinType: '0xdba3::usdc::USDC', telosTo: HOP, memo: `${WAX}:<account>|${SUI}:<your address>` } });
+  assert.deepEqual(pair('near', 'wax').how, {
+    deposit: { nearToken: '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1', telosTo: HOP, memo: `${WAX}:<account>|${NEAR}:0x<sha256 of your NEAR account id>` },
+  });
+  assert.deepEqual(pair('wax', 'near').how, {
+    transfer: { contract: 'wrap.alcor', memo: `${HOP}:${NEAR}:0x<sha256 of the NEAR account id>|${WAX}:<your account>` },
+  });
+  assert.deepEqual(pair('sui', 'near').how.deposit.memo, `${NEAR}:0x<sha256 of the NEAR account id>|${SUI}:<your address>`);
+  assert.equal(pair('wax', 'sui').open, true);
+  assert.deepEqual(all.find((r) => r.from === 'sui' && r.to === 'telos-production').how, { deposit: { coinType: '0xdba3::usdc::USDC', telosTo: '<telos account>' } });
+});

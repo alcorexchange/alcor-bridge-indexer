@@ -315,12 +315,21 @@ function openness(reasons: (string | null)[], max: string | null) {
 }
 
 const isAntelope = (c: ChainEntry) => c.kind === 'antelope';
-/** Sui crosses to and from Telos only: hop.alcor predates its 32-byte addresses. */
 const isSui = (c: ChainEntry) => c.kind === 'sui';
-/** NEAR likewise: its accounts are 32-byte hashes on Telos. */
 const isNear = (c: ChainEntry) => c.kind === 'near';
 const domainOf = (c: ChainEntry) => String(c.domain ?? c.chainId);
-const recipientHint = (c: ChainEntry) => (isAntelope(c) ? '<account>' : '0x<address>');
+/** A recipient on `c` as a hop memo spells it: a NEAR account is the sha256 of its id. */
+const recipientHint = (c: ChainEntry) =>
+  isAntelope(c) ? '<account>' : isNear(c) ? '0x<sha256 of the NEAR account id>' : '0x<address>';
+/** The depositor's own address on `c`, as the way back of a hop memo spells it. */
+const homeHint = (c: ChainEntry) =>
+  isAntelope(c) ? '<your account>' : isNear(c) ? '0x<sha256 of your NEAR account id>' : '<your address>';
+
+/** How to deposit `r` on chain `a` (not Antelope) for `telosTo`, with `memo` if any. */
+function depositHow(a: ChainEntry, r: ChainRoute, telosTo: string | null, memo?: string) {
+  const token = isSui(a) ? { coinType: r.coinType ?? null } : isNear(a) ? { nearToken: r.nearToken ?? null } : { token: r.token ?? null };
+  return { deposit: { ...token, telosTo, ...(memo === undefined ? {} : { memo }) } };
+}
 
 /**
  * Every way an asset can go, as pairs of chains: straight to and from Telos,
@@ -354,11 +363,7 @@ export function routesBetween(
         max: depositMax,
         how: isAntelope(a)
           ? { transfer: { contract: r.antelopeToken?.contract ?? null, memo: r.depositMemo ?? '<telos account>' } }
-          : isSui(a)
-            ? { deposit: { coinType: r.coinType ?? null, telosTo: '<telos account>' } }
-            : isNear(a)
-              ? { deposit: { nearToken: r.nearToken ?? null, telosTo: '<telos account>' } }
-              : { deposit: { token: r.token ?? null, telosTo: '<telos account>' } },
+          : depositHow(a, r, '<telos account>'),
       });
       out.push({
         symbol: r.symbol,
@@ -373,7 +378,7 @@ export function routesBetween(
       });
 
       for (const b of chains) {
-        if (b === a || isSui(a) || isSui(b) || isNear(a) || isNear(b)) continue;
+        if (b === a) continue;
         const onward = b.routes?.find((x) => x.symbol === r.symbol);
         if (!onward) continue;
         const reasons: (string | null)[] = [];
@@ -381,7 +386,7 @@ export function routesBetween(
         else if (!hop.deployed) reasons.push(`${hop.account} runs no code`);
         reasons.push(shut(a, r, 'deposits'), shut(b, onward, 'withdrawals'), depositFull(a, r), payoutEmpty(b, onward));
 
-        const memo = `${domainOf(b)}:${recipientHint(b)}|${domainOf(a)}:${isAntelope(a) ? '<your account>' : '<your address>'}`;
+        const memo = `${domainOf(b)}:${recipientHint(b)}|${domainOf(a)}:${homeHint(a)}`;
         const max = atMost(onward.withdrawableNow, r.depositableNow);
         out.push({
           symbol: r.symbol,
@@ -394,7 +399,7 @@ export function routesBetween(
           max,
           how: isAntelope(a)
             ? { transfer: { contract: r.antelopeToken?.contract ?? null, memo: `${hop.account}:${memo}` } }
-            : { deposit: { token: r.token ?? null, telosTo: hop.account ?? null, memo } },
+            : depositHow(a, r, hop.account ?? null, memo),
         });
       }
     }

@@ -237,8 +237,9 @@ string end to end. Every point under WAX holds, with these differences:
 
 Sui is its own kind of chain, `"kind": "sui"`, `"id": "sui"`, domain
 `"3856007665771390095"` (the first eight bytes of its chain identifier). On only
-where the instance has `SUI_GRAPHQL`. Only straight to and from Telos: no hops
-and no swap plans through Sui yet.
+where the instance has `SUI_GRAPHQL`. Hops and swap plans go through Sui like
+any chain: a deposit to `hop.alcor` (or `route.alcor`) with the memo in the
+deposit, a way back of `<sui domain>:0x<64 hex digits>`.
 
 - **Objects**, in `contracts`: the `vault` (shared), the `package` that defines
   it and the `telosClient` (shared). Read them from here, never from your own
@@ -269,8 +270,10 @@ NEAR is its own kind of chain, `"kind": "near"`: `"id": "near"`, domain
 `"14338890689662875897"` on mainnet, and `"id": "near-testnet"`, domain
 `"15529777497819211366"` on testnet (the first eight bytes of each genesis
 hash). On only where the instance has `NEAR_RPC` / `NEAR_TESTNET_RPC`, and only
-once the ledger has a route to it. Only straight to and from Telos: no hops and
-no swap plans through NEAR yet.
+once the ledger has a route to it. Hops and swap plans go through NEAR like any
+chain; in a hop memo a NEAR account is written as on Telos,
+`<near domain>:0x<sha256 of the account id>` (`/v1/swap/plan` takes the account
+id and writes the hash itself).
 
 - **Addresses.** On Telos every NEAR account is the sha256 of its account id:
   the vault, each token (the NEP-141 contract's id; native NEAR is `NEAR`), each

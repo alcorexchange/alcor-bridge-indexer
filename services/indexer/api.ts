@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { EVM_CHAINS } from '../../src/chains/evm.ts';
 import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, humanEta, nearDepositEta, nearWithdrawalEta, suiDepositEta, suiWithdrawalEta, withdrawalEta } from '../../src/chains/eta.ts';
 import { isTrusted, knowsKey, nearVaultState } from '../../src/near/client.ts';
+import { nearRpc } from '../../src/near/rpc.ts';
 import { handoverCalls, settleCalls as nearSettleCalls } from '../../src/near/withdrawal.ts';
 import { fetchRegistrations, type Registration } from '../../src/savanna/registrations.ts';
 import { TELOS_HISTORY } from '../../src/config.ts';
@@ -2023,12 +2024,13 @@ async function fastPart(deps: Deps, row: TransferRow, gatewayAction: string): Pr
 }
 
 /**
- * What `/v1/swap/plan` reads from Telos and the Antelope chains this instance
- * reads. Null when the chain is not one of them, or its node does not answer.
+ * What `/v1/swap/plan` reads from Telos, the Antelope chains and NEAR this
+ * instance reads. Null when the chain is not one of them, or its node does not
+ * answer.
  *
  * - An account exists when it has its `userres` row: every account the system
  *   contract created has one, on Telos, WAX, XPR and Vaulta alike, and a name
- *   nobody created has none.
+ *   nobody created has none. On NEAR, when `view_account` finds it.
  * - A token's precision is its `stat` row's supply; no row, no such token.
  */
 function chainReader(cfg: IndexerConfig): ChainReader {
@@ -2038,6 +2040,15 @@ function chainReader(cfg: IndexerConfig): ChainReader {
   };
   return {
     async account(chain, name) {
+      const near = cfg.near.find((n) => n.chain.id === chain);
+      if (near) {
+        try {
+          await nearRpc(near.rpc, 'query', { request_type: 'view_account', finality: 'final', account_id: name });
+          return true;
+        } catch (err) {
+          return /UNKNOWN_ACCOUNT/.test((err as Error).message) ? false : null;
+        }
+      }
       const rpc = rpcOf(chain);
       if (!rpc) return null;
       try {

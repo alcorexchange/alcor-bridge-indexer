@@ -27,7 +27,9 @@
  * crossing's floor, the way back reachable, memos inside 256 bytes.
  */
 
+import { NEAR_ACCOUNT } from '../../src/chains/near.ts';
 import { ANTELOPE_SWAPS, ROUTE_MEMO } from '../../src/chains/swaps.ts';
+import { nearAddress } from '../../src/near/logs.ts';
 import { fetchJson, HttpError } from '../../src/net/fetchJson.ts';
 import { SETTLEMENT_CHAIN } from './config.ts';
 import { decimalAmount, decimalUnits, parseAsset } from './units.ts';
@@ -42,7 +44,7 @@ export type PlanRequest = {
   to: string;
   /** In whole tokens, a decimal: `1233`, `0.5`. */
   amount: string;
-  /** Who receives on the destination chain: a 0x address, or an account. */
+  /** Who receives on the destination chain: a 0x address, an account, or a NEAR account id. */
   recipient: string;
   /** Who sends on the source chain: where the token goes back to if it is never swapped. */
   sender: string;
@@ -63,7 +65,10 @@ export type PlanRoute = {
   reason?: string;
   min: string;
   max: string | null;
-  how: { deposit?: { token: string | null }; transfer?: { contract?: string | null } };
+  how: {
+    deposit?: { token?: string | null; coinType?: string | null; nearToken?: string | null };
+    transfer?: { contract?: string | null };
+  };
 };
 
 /** A chain of `/v1/chains`' `sources`, the fields read here. */
@@ -102,7 +107,7 @@ export type Quoter = (
 
 /** What the plan reads from Telos and the Antelope chains; null when it cannot be read now. */
 export type ChainReader = {
-  /** Whether account `name` exists on `chain` (an id of `/v1/chains`, or Telos). */
+  /** Whether account `name` exists on `chain` (an id of `/v1/chains`, or Telos; on NEAR an account id). */
   account(chain: string, name: string): Promise<boolean | null>;
   /** The precision of token `symbol` of `contract` on `chain`; false when there is no such token. */
   precision(chain: string, contract: string, symbol: string): Promise<number | false | null>;
@@ -121,11 +126,15 @@ export type PlanContext = {
 /** About how long the executor takes to swap an order once it lands, in seconds. */
 const SWAP_SECONDS = 5;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const SUI_ADDRESS = /^0x[0-9a-fA-F]{64}$/;
+const NEAR_ID = new RegExp(NEAR_ACCOUNT);
 const ACCOUNT = /^[a-z1-5.]{1,12}$/;
 const MIRROR = 'wrap.alcor';
 const TELOS: PlanChain = { id: SETTLEMENT_CHAIN, name: 'Telos', kind: 'antelope' };
 
 const isAntelope = (c: PlanChain): boolean => c.kind === 'antelope';
+const isSui = (c: PlanChain): boolean => c.kind === 'sui';
+const isNear = (c: PlanChain): boolean => c.kind === 'near';
 const domainOf = (c: PlanChain): string => String(c.domain ?? c.chainId);
 const routeOf = (chain: string): string | null => ANTELOPE_SWAPS[chain]?.route ?? null;
 
@@ -141,15 +150,23 @@ function side(text: string, what: string): { chain: string; symbol: string; cont
   return { chain: m[1], symbol: m[2], contract: m[3] ?? null };
 }
 
-/** A recipient or sender on `c`, in the spelling the ledger stores: lowercase hex, or the account. */
+/** A recipient or sender on `c`, as that chain spells it: the account, the account id, or lowercase hex. */
 function party(c: PlanChain, text: string, what: string): string {
   if (isAntelope(c)) {
     if (!ACCOUNT.test(text)) throw new PlanRefused(`${what} on ${c.name} is an account name`);
     return text;
   }
-  if (!EVM_ADDRESS.test(text) || /^0x0{40}$/i.test(text)) throw new PlanRefused(`${what} on ${c.name} is a non-zero 0x address`);
+  if (isNear(c)) {
+    if (!NEAR_ID.test(text)) throw new PlanRefused(`${what} on ${c.name} is a NEAR account id`);
+    return text;
+  }
+  const [format, zero] = isSui(c) ? [SUI_ADDRESS, /^0x0{64}$/] : [EVM_ADDRESS, /^0x0{40}$/];
+  if (!format.test(text) || zero.test(text)) throw new PlanRefused(`${what} on ${c.name} is a non-zero 0x address`);
   return text.toLowerCase();
 }
+
+/** `party` on `c` as the ledger stores it: a NEAR account is `0x` and the sha256 of its id. */
+const onLedger = (c: PlanChain, party: string): string => (isNear(c) ? `0x${nearAddress(party)}` : party);
 
 /** `units` at `precision` decimals with every decimal written, as an Antelope asset is: `0.15418631`. */
 function decimalFixed(units: bigint, precision: number): string {
@@ -186,13 +203,14 @@ const no = (reason: string): Unavailable => ({ possible: false, reason });
  * comes back to the hop and goes out to the same place again, a withdrawal TTL
  * per try — it never returns home. So the place must take it: on an Antelope
  * chain an account that exists, and not one of the bridge's own (the vault, the
- * route, the token); on an EVM chain not the vault itself. An account that does
- * not exist yet would also be a prize for whoever registers the name first.
+ * route, the token); on NEAR an account that exists too; on an EVM chain or Sui
+ * not the vault itself. An account that does not exist yet would also be a
+ * prize for whoever registers the name first.
  */
 async function undeliverable(target: PlanChain, recipient: string, read: ChainReader): Promise<string | null> {
   const own = [target.contracts?.vault, routeOf(target.id), MIRROR].filter(Boolean).map((a) => a!.toLowerCase());
   if (own.includes(recipient)) return `${recipient} is the bridge's own account on ${target.name}, not a recipient`;
-  if (!isAntelope(target)) return null;
+  if (!isAntelope(target) && !isNear(target)) return null;
   const exists = await read.account(target.id, recipient);
   if (exists === null) return `cannot check now that ${recipient} exists on ${target.name}`;
   return exists ? null : `${recipient} does not exist on ${target.name}: create the account first`;
@@ -215,7 +233,12 @@ type Transfer = { account: string; name: 'transfer'; data: { from: string; to: s
 /** What the user signs on the source chain: the whole journey starts there. */
 type Sign =
   | { kind: 'actions'; chain: string; actions: Transfer[] }
-  | { kind: 'deposit'; chain: string; vault: string | null; token: string | null; telosTo: string; refundTo: string; memo: string };
+  | {
+    kind: 'deposit'; chain: string; vault: string | null;
+    /** What to deposit: an ERC-20 (null for the native coin), a Sui coin type, or a NEAR token (`NEAR` for the native one). */
+    token: string | null; coinType?: string | null; nearToken?: string | null;
+    telosTo: string; refundTo: string; memo: string;
+  };
 
 /** The bridge's routes and chains, as the plan asks about them. */
 class Network {
@@ -226,8 +249,7 @@ class Network {
   }
 
   chain(id: string): PlanChain | undefined {
-    // Sui and NEAR are direct routes to Telos only; no swap or hop is planned through them yet.
-    return id === SETTLEMENT_CHAIN ? TELOS : this.ctx.chains.find((c) => c.id === id && c.kind !== 'sui' && c.kind !== 'near');
+    return id === SETTLEMENT_CHAIN ? TELOS : this.ctx.chains.find((c) => c.id === id);
   }
 
   /** The route between Telos and a chain, or between two chains through Telos (a hop's row). */
@@ -489,7 +511,7 @@ async function planWay(job: Job, way: Way) {
   if (crossing <= 0n) return no('the swap gives nothing at this amount');
 
   // --- the crossing and the bridge's swap -------------------------------------------------
-  const homeLeg = `${domainOf(source)}:${sender}`;
+  const homeLeg = `${domainOf(source)}:${onLedger(source, sender)}`;
   let expected: bigint;
   let least: bigint;
   let decimals: number;
@@ -525,7 +547,7 @@ async function planWay(job: Job, way: Way) {
       expected: assetText(expected, decimals, output.symbol), least: assetText(least, decimals, output.symbol),
       priceImpact: q.priceImpact, pools: q.pools,
     });
-    const toPlace = target.id === SETTLEMENT_CHAIN ? recipient : `${domainOf(target)}:${recipient}`;
+    const toPlace = target.id === SETTLEMENT_CHAIN ? recipient : `${domainOf(target)}:${onLedger(target, recipient)}`;
     back = homeLeg;
     memo = `${toPlace}|${assetText(least, decimals, output.symbol)}@${bought.contract}|${deadline}|${back}`;
     telosTo = route;
@@ -543,7 +565,7 @@ async function planWay(job: Job, way: Way) {
     if (source.id !== SETTLEMENT_CHAIN) parts.push({ what: `${source.name} to Telos`, seconds: source.timing?.deposit?.seconds ?? 0 });
     if (target.id !== SETTLEMENT_CHAIN) parts.push({ what: `Telos to ${target.name}`, seconds: target.timing?.withdrawal?.seconds ?? 0 });
 
-    let payee = recipient;
+    let payee = onLedger(target, recipient);
     if (way.order === 'destination') {
       const route = routeOf(target.id)!;
       const q = await ctx.quote(target.id, tokenId(net.token(target.id, way.carrier)), tokenId(output), decimalAmount(crossing, carrierPrecision), route, slippageBps);
@@ -604,9 +626,12 @@ async function planWay(job: Job, way: Way) {
       ],
     };
   } else {
+    const deposit = net.route(way.carrier, source.id, SETTLEMENT_CHAIN)?.how.deposit;
     sign = {
       kind: 'deposit', chain: source.id, vault: source.contracts?.vault ?? null,
-      token: net.route(way.carrier, source.id, SETTLEMENT_CHAIN)?.how.deposit?.token ?? null,
+      token: deposit?.token ?? null,
+      ...(isSui(source) ? { coinType: deposit?.coinType ?? null } : {}),
+      ...(isNear(source) ? { nearToken: deposit?.nearToken ?? null } : {}),
       telosTo, refundTo: sender, memo: telosMemo,
     };
   }
