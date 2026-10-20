@@ -151,14 +151,55 @@ export async function eventPath(urls: string[], digest: string, pick: number | (
   return { sequence: summary.sequence, contents: hex(contents), effects: hex(effects), events: hex(events), index, event };
 }
 
-/** What the Telos side needs to close one vault event, and which event it was. */
-export type VaultEventClose = {
+type Action = { account: string; name: string; data: Record<string, unknown> };
+
+/** What the gateway needs to close one vault event, and which event it was. */
+export type VaultEventProof = {
   kind: 'credit' | 'voided';
   /** The vault object the event names: a relayer skips any vault but its route's. */
   vault: string;
+  /** The checkpoint the event is under, which the light client must hold. */
   sequence: bigint;
-  actions: { account: string; name: string; data: Record<string, unknown> }[];
+  /** The gateway's `credit` (a Deposit) or `voided` (a Voided). */
+  action: Action;
 };
+
+/**
+ * The gateway half of closing a vault event, without its checkpoint's
+ * certificate: a checkpoint the light client already holds needs none, and its
+ * committee may be past its trust by then (NEAR-Sui audit S-04).
+ */
+export async function vaultEventProof(
+  urls: string[],
+  digest: string,
+  event: number,
+  gateway: string,
+  payer: string,
+): Promise<VaultEventProof> {
+  const path = await eventPath(urls, digest, event);
+  const ev = parseEvents(fromHex(path.events))[path.event];
+  const kind = ev.type.endsWith('::vault::Deposit') ? 'credit' : ev.type.endsWith('::vault::Voided') ? 'voided' : null;
+  if (!kind) throw new Error(`sui: event ${event} of ${digest} is ${ev.type}, not a vault Deposit or Voided`);
+  return {
+    kind,
+    vault: `0x${hex(ev.contents.subarray(0, 32))}`,
+    sequence: path.sequence,
+    action: {
+      account: gateway,
+      name: kind,
+      data: { payer, sequence: Number(path.sequence), contents: path.contents, effects: path.effects, events: path.events, index: path.index, event: path.event },
+    },
+  };
+}
+
+/** `provecp` for one checkpoint, with its certificate. */
+export async function proveCheckpointAction(urls: string[], sequence: bigint, lightClient: string, payer: string): Promise<Action> {
+  const cp = await certifiedCheckpoint(urls, sequence);
+  return { account: lightClient, name: 'provecp', data: { payer, cp: cp.args } };
+}
+
+/** What the Telos side needs to close one vault event, and which event it was. */
+export type VaultEventClose = Omit<VaultEventProof, 'action'> & { actions: Action[] };
 
 /**
  * One Telos transaction for a vault event: `provecp` on the light client for its
@@ -172,22 +213,7 @@ export async function closeVaultEvent(
   accounts: { lightClient: string; gateway: string },
   payer: string,
 ): Promise<VaultEventClose> {
-  const path = await eventPath(urls, digest, event);
-  const ev = parseEvents(fromHex(path.events))[path.event];
-  const kind = ev.type.endsWith('::vault::Deposit') ? 'credit' : ev.type.endsWith('::vault::Voided') ? 'voided' : null;
-  if (!kind) throw new Error(`sui: event ${event} of ${digest} is ${ev.type}, not a vault Deposit or Voided`);
-  const cp = await certifiedCheckpoint(urls, path.sequence);
-  return {
-    kind,
-    vault: `0x${hex(ev.contents.subarray(0, 32))}`,
-    sequence: path.sequence,
-    actions: [
-      { account: accounts.lightClient, name: 'provecp', data: { payer, cp: cp.args } },
-      {
-        account: accounts.gateway,
-        name: kind,
-        data: { payer, sequence: Number(path.sequence), contents: path.contents, effects: path.effects, events: path.events, index: path.index, event: path.event },
-      },
-    ],
-  };
+  const { action, ...proof } = await vaultEventProof(urls, digest, event, accounts.gateway, payer);
+  const prove = await proveCheckpointAction(urls, proof.sequence, accounts.lightClient, payer);
+  return { ...proof, actions: [prove, action] };
 }

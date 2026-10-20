@@ -788,7 +788,7 @@ async function suiStatus(cfg: IndexerConfig, ledger: Ledger, sui: SuiConfig) {
     committee: newest ? { epoch: Number(newest.epoch), startMs: Number(newest.start_ms), members: (newest.stakes ?? []).length } : null,
     lightClient: { account: lightClient, contract: null },
     gateway,
-    contracts: { vault: vaultId, package: vault.package, telosClient: vault.telosClient },
+    contracts: { vault: vaultId, package: vault.callPackage, telosClient: vault.telosClient },
     active: {
       deposits: !vault.depositsPaused && routes.some((r: any) => r.deposits && r.vaultEnabled),
       withdrawals: !vault.withdrawalsPaused && routes.some((r: any) => r.withdrawals),

@@ -1639,9 +1639,8 @@ async function suiWithdrawalProof(deps: Deps, row: TransferRow, artifact: Withdr
   const client = await clientState(sui.graphql, vault.telosClient);
   const root = frozenSubmitRoot(artifact.submitRoot);
   const signing = Number(root.finality.activeGeneration);
-  // The package that defines the vault. After an upgrade the calls go to the
-  // newest version instead; nothing has been upgraded yet.
-  const ids = { package: vault.package, telosClient: vault.telosClient, vault: vault.vault, coinType: '0x' + coin.coinType };
+  // The newest version of the vault's package: an upgrade retires the code before it.
+  const ids = { package: vault.callPackage, telosClient: vault.telosClient, vault: vault.vault, coinType: '0x' + coin.coinType };
   return {
     code: 200,
     body: {

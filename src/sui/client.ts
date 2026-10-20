@@ -67,6 +67,11 @@ export type VaultState = {
   vault: string;
   /** The package that defines the vault: its ORIGINAL id (types keep it across upgrades). */
   package: string;
+  /**
+   * The newest version of that package: where calls go. An upgrade retires the
+   * code before it (`migrate`), so a call to the original is refused from then on.
+   */
+  callPackage: string;
   telosClient: string;
   domain: string;
   depositsPaused: boolean;
@@ -86,17 +91,31 @@ async function dynamicFields(urls: string[], parent: string): Promise<{ name: an
   }
 }
 
+/** The newest version of a package, by its original id. */
+export async function latestPackage(urls: string[], original: string): Promise<string> {
+  const [newest] = (await suiGraphql(urls, `{ packageVersions(address: "${original}", last: 1) { nodes { address } } }`))
+    .packageVersions.nodes;
+  if (!newest) throw new Error(`sui: no package at ${original}`);
+  return newest.address;
+}
+
 /** The vault object as it stands: who it trusts, whether it is open, and every coin it lists. */
 export async function vaultState(urls: string[], vault: string): Promise<VaultState> {
   const o = (await suiGraphql(urls, `{ object(address: "${vault}") { asMoveObject { contents { type { repr } json } } } }`)).object;
   const contents = o?.asMoveObject?.contents;
   if (!contents?.type?.repr?.endsWith('::vault::Vault')) throw new Error(`sui: ${vault} is not a bridge vault`);
   const j = contents.json;
-  const [assets, balances] = await Promise.all([dynamicFields(urls, j.assets.id), dynamicFields(urls, j.balances.id)]);
+  const original = contents.type.repr.split('::')[0];
+  const [assets, balances, callPackage] = await Promise.all([
+    dynamicFields(urls, j.assets.id),
+    dynamicFields(urls, j.balances.id),
+    latestPackage(urls, original),
+  ]);
   const held = new Map(balances.map((b) => [String(b.name), BigInt(b.value)]));
   return {
     vault,
-    package: contents.type.repr.split('::')[0],
+    package: original,
+    callPackage,
     telosClient: j.client,
     domain: String(j.domain),
     depositsPaused: Boolean(j.deposits_paused),
