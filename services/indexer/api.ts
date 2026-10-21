@@ -33,6 +33,7 @@ import { SLOT_SECONDS } from '../../src/config.ts';
 import { proverootPositional } from '../../src/proofs.ts';
 import { antelopeToken, chainsStatus } from './chains.ts';
 import { humanAmount, parseAsset } from './units.ts';
+import { minimumAlarms } from './minimums.ts';
 import { epochBacklog } from './parlia.ts';
 import { proverootArgs as polygonProveroot } from '../../src/polygon/proof.ts';
 import { SETTLEMENT_CHAIN, chainOfDomain, type Domain, type IndexerConfig } from './config.ts';
@@ -595,6 +596,13 @@ async function health(deps: Deps) {
     alarms.push(...(await holdAlarms(deps)));
   } catch (err) {
     alarms.push(`holds: ${(err as Error).message}`);
+  }
+
+  // Floors out of the order a deposit address relies on (minimums.ts).
+  try {
+    alarms.push(...minimumAlarms((await status(deps)).sources as any[]));
+  } catch (err) {
+    alarms.push(`minimums: ${(err as Error).message}`);
   }
 
   // RAM the bridge's own rows are paid from. Out of it, every route stops.

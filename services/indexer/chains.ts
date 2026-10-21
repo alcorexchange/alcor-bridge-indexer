@@ -255,6 +255,8 @@ async function withOutflow<
           /** The most one deposit can add before the vault refuses `CapExceeded`; null when uncapped. */
           depositableNow: room === null ? null : (room < 0n ? 0n : room).toString(),
           vaultEnabled: word(asset, 2) === 1n,
+          /** The vault's own floor, canonical units: under it the vault refuses `BelowMinimum`. */
+          vaultMinDeposit: word(asset, 1).toString(),
         };
       } catch (err) {
         return { ...r, outflowError: (err as Error).message };

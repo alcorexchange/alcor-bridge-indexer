@@ -1456,7 +1456,8 @@
        "vaultCap": null,
        "vaultHeld": "0",
        "depositableNow": null,
-       "vaultEnabled": false
+       "vaultEnabled": false,
+       "vaultMinDeposit": "0"
       }
      ],
      "swaps": null
@@ -1554,7 +1555,8 @@
        "vaultCap": null,
        "vaultHeld": "0",
        "depositableNow": null,
-       "vaultEnabled": false
+       "vaultEnabled": false,
+       "vaultMinDeposit": "0"
       }
      ],
      "swaps": null
@@ -1652,7 +1654,8 @@
        "vaultCap": null,
        "vaultHeld": "0",
        "depositableNow": null,
-       "vaultEnabled": false
+       "vaultEnabled": false,
+       "vaultMinDeposit": "0"
       }
      ],
      "swaps": null

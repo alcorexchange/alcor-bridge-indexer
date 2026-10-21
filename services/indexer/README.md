@@ -126,7 +126,7 @@ ambiguity.
 | | |
 |---|---|
 | `GET /api/bridge/docs` | the front-end document, served by the API it describes |
-| `GET /api/bridge/health` | both streams, lag, alarms, storage, recent incidents |
+| `GET /api/bridge/health` | both streams, lag, alarms (among them EVM vault floors out of order, `minimums.ts`), storage, recent incidents |
 | `GET /api/bridge/v1/stats` | counts by direction and status |
 | `GET /api/bridge/v1/volume` | volume and distinct accounts/addresses per asset and direction: 24h, 7d, 30d, all time, average per day, busiest day, daily series; `?days=` |
 | `GET /api/bridge/v1/transfers` | `?account= &address= &direction= &status= &flag= &limit= &before=` |
