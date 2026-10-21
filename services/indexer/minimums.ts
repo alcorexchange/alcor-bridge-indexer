@@ -55,3 +55,28 @@ export function minimumAlarms(sources: Source[]): string[] {
   }
   return alarms;
 }
+
+/**
+ * What keeps `minimumAlarms` from being an answer: a listing with no EVM chain,
+ * one of `expected` missing, a chain the listing could not read or that lists
+ * no routes, or an EVM backing route whose vault floor is not there. An empty
+ * result means the alarms cover everything; anything else means they prove
+ * nothing, and a check that must pass before a deployment fails (courier re-audit).
+ */
+export function unchecked(sources: Source[], expected: string[]): string[] {
+  const out: string[] = [];
+  const evm = sources.filter((s) => typeof s.chainId === 'number');
+  if (!evm.length) out.push('no EVM chain in the listing');
+  for (const id of expected) if (!evm.some((s) => s.id === id)) out.push(`${id}: not in the listing`);
+  for (const s of sources) {
+    if (s.error) out.push(`${s.id}: the listing could not read it (${s.error})`);
+    else if (!(s.routes ?? []).length) out.push(`${s.id}: no routes listed`);
+  }
+  for (const s of evm) {
+    for (const r of s.routes ?? []) {
+      if (r.kind === 'backing' && r.vaultMinDeposit === undefined) out.push(`${s.id} ${r.symbol}: the vault's floor was not read`);
+    }
+  }
+  return out;
+}
+

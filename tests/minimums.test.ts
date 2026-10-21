@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { minimumAlarms } from '../services/indexer/minimums.ts';
+import { minimumAlarms, unchecked } from '../services/indexer/minimums.ts';
 
 const eth = (vaultMinDeposit: string, minDeposit = '10000') => ({
   id: 'mainnet', name: 'Ethereum', chainId: 1,
@@ -38,3 +38,15 @@ test('only EVM vaults, and only the same asset', () => {
   // An EVM route whose vault was not read has no floor to compare.
   assert.deepEqual(minimumAlarms([{ ...eth('1'), routes: [{ ...eth('1').routes[0], vaultMinDeposit: undefined }] }, wax('100000')]), []);
 });
+
+test('what was not read is reported, so a barrier can refuse it', () => {
+  assert.deepEqual(unchecked([eth('100000'), wax('100000')], ['mainnet']), []);
+  assert.deepEqual(unchecked([], []), ['no EVM chain in the listing']);
+  // Only a healthy mainnet, where BSC was expected.
+  assert.deepEqual(unchecked([eth('100000')], ['mainnet', 'bsc']), ['bsc: not in the listing']);
+  assert.deepEqual(unchecked([eth('100000'), { id: 'wax', name: 'WAX', error: 'timeout' }], ['mainnet']), ['wax: the listing could not read it (timeout)']);
+  assert.deepEqual(unchecked([eth('100000'), { id: 'wax', name: 'WAX', routes: [] }], ['mainnet']), ['wax: no routes listed']);
+  const unread = { ...eth('1'), routes: [{ ...eth('1').routes[0], vaultMinDeposit: undefined }] };
+  assert.deepEqual(unchecked([unread, wax('100000')], ['mainnet']), ['mainnet ETH: the vault\'s floor was not read']);
+});
+
