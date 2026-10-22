@@ -3,6 +3,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { Store, depositKey, withdrawalKey, voidKey, evmDomain, externalToken, BOOKED } from '../services/indexer/db.ts';
 
@@ -45,6 +49,25 @@ test('an upsert keeps a field the new write does not carry', () => {
   assert.equal(row.src_tx, '0x1');
   assert.equal(row.token, '0xt');
   assert.equal(row.dst_tx, 'telos');
+});
+
+test('a withdrawal keeps its delivery fee, and a transfers table from before gains the column', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'alcor-db-')), 'indexer.sqlite');
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE transfers (key TEXT PRIMARY KEY, direction TEXT NOT NULL, ref INTEGER NOT NULL,
+    status TEXT NOT NULL, account TEXT, evm_address TEXT, token TEXT, symbol TEXT, amount TEXT, amount_raw TEXT,
+    domain TEXT, src_block INTEGER NOT NULL, src_time INTEGER NOT NULL, src_tx TEXT, dst_block INTEGER,
+    dst_time INTEGER, dst_tx TEXT, deadline INTEGER, proof_at INTEGER, refund_tx TEXT, memo TEXT,
+    updated_at INTEGER NOT NULL)`);
+  old.close();
+
+  const store = new Store(file);
+  const key = withdrawalKey(361);
+  store.upsertTransfer({ key, direction: 'withdrawal', ref: 361, status: 'provable', src_block: 5, src_time: 50, fee: '7150' });
+  // Reconciliation's write says nothing of the fee, and must not drop it.
+  store.upsertTransfer({ key, direction: 'withdrawal', ref: 361, status: 'released', src_block: 5, src_time: 50 });
+  assert.equal(store.getTransfer(key)!.fee, '7150');
+  store.close();
 });
 
 test('pendingDeposits: one chain, unbooked, with a source transaction and no proof', () => {

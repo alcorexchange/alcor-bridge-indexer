@@ -585,6 +585,7 @@ export class SettlementFollower {
       src_time: burnedAt,
       src_tx: srcTx,
       deadline: Number(r.deadline),
+      fee: r.fee.toString(),
       proof_at: Math.floor(Date.now() / 1000),
     });
     this.state.frozen++;
@@ -721,6 +722,7 @@ export class SettlementFollower {
       domain: number | string;
       recipient: string;
       deadline: number | string;
+      fee: number | string;
       status: number;
       block_num: number;
       at: string;
@@ -756,6 +758,7 @@ export class SettlementFollower {
         src_block: Number(w.block_num),
         src_time: Math.floor(Date.parse(`${w.at}Z`) / 1000),
         deadline: Number(w.deadline),
+        fee: String(w.fee),
       });
 
       if (!antelope && !hasProof && Number(w.status) === 0) {

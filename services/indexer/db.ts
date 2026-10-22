@@ -88,6 +88,12 @@ export type TransferRow = {
   refund_tx: string | null;
   /** What a deposit asked to be handed on with; null for a plain one. */
   memo: string | null;
+  /**
+   * A withdrawal's delivery fee, canonical units out of `amount`: paid to
+   * whoever releases it. Above zero the courier delivers it; zero or null
+   * leaves the release to the owner.
+   */
+  fee: string | null;
   updated_at: number;
 };
 
@@ -260,8 +266,21 @@ export class Store {
       .run(String(Math.floor(Date.now() / 1000)));
   }
 
+  /**
+   * One-off, 2026-10-23: transfers gained `fee`, so a page can tell a
+   * withdrawal the courier delivers from one its owner releases. Rows from
+   * before are filled by the next reconciliation pass, which reads every
+   * `wdraws` row. Remove once every live database has run it.
+   */
+  private addTransferFee(): void {
+    const columns = this.db.prepare(`PRAGMA table_info(transfers)`).all() as { name: string }[];
+    if (!columns.length || columns.some((c) => c.name === 'fee')) return;
+    this.db.exec('ALTER TABLE transfers ADD COLUMN fee TEXT');
+  }
+
   private createSchema(): void {
     this.dropSwapsBeforeLegs();
+    this.addTransferFee();
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
@@ -287,6 +306,7 @@ export class Store {
         proof_at    INTEGER,
         refund_tx   TEXT,
         memo        TEXT,
+        fee         TEXT,
         updated_at  INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS transfers_account ON transfers (account, src_time DESC);
@@ -480,7 +500,7 @@ export class Store {
     const merged: TransferRow = {
       account: null, evm_address: null, token: null, symbol: null, amount: null,
       amount_raw: null, domain: null, src_tx: null, dst_block: null, dst_time: null,
-      dst_tx: null, deadline: null, proof_at: null, refund_tx: null, memo: null,
+      dst_tx: null, deadline: null, proof_at: null, refund_tx: null, memo: null, fee: null,
       ...start,
       ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined && v !== null)),
       key: row.key,
@@ -494,8 +514,8 @@ export class Store {
       .prepare(
         `INSERT INTO transfers (key, direction, ref, status, account, evm_address, token, symbol,
             amount, amount_raw, domain, src_block, src_time, src_tx, dst_block, dst_time, dst_tx,
-            deadline, proof_at, refund_tx, memo, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            deadline, proof_at, refund_tx, memo, fee, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(key) DO UPDATE SET
            status = excluded.status, account = excluded.account,
            evm_address = excluded.evm_address, token = excluded.token, symbol = excluded.symbol,
@@ -503,7 +523,7 @@ export class Store {
            src_block = excluded.src_block, src_time = excluded.src_time, src_tx = excluded.src_tx,
            dst_block = excluded.dst_block, dst_time = excluded.dst_time, dst_tx = excluded.dst_tx,
            deadline = excluded.deadline, proof_at = excluded.proof_at,
-           refund_tx = excluded.refund_tx, memo = excluded.memo,
+           refund_tx = excluded.refund_tx, memo = excluded.memo, fee = excluded.fee,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -511,7 +531,7 @@ export class Store {
         merged.evm_address, merged.token, merged.symbol, merged.amount, merged.amount_raw,
         merged.domain, merged.src_block, merged.src_time, merged.src_tx, merged.dst_block,
         merged.dst_time, merged.dst_tx, merged.deadline, merged.proof_at, merged.refund_tx,
-        merged.memo, merged.updated_at,
+        merged.memo, merged.fee, merged.updated_at,
       );
   }
 

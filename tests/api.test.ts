@@ -172,7 +172,8 @@ function seed(store: Store): void {
   deposit('137', 6, { amount: '7000000', status: 'provable', proof_at: NOW - 100 });
   withdrawal(7, '56', { status: 'expired', amount: '3000000', deadline: NOW - 10 });
   withdrawal(8, '1', { amount: '3000000', deadline: NOW + 86_400, src_block: 1200 });
-  withdrawal(9, '1', { status: 'provable', amount: '3000000', deadline: NOW + 86_400, src_block: 1200 });
+  // Burned with a delivery fee: the courier releases it.
+  withdrawal(9, '1', { status: 'provable', amount: '3000000', fee: '21000', deadline: NOW + 86_400, src_block: 1200 });
   withdrawal(10, '999', { amount: '3000000', src_block: 1200 });
   // An Antelope deposit and withdrawal, proved and released by their relayers.
   deposit(WAX, 12, { amount: '2000000000', token: waxRoute.ext_token, evm_address: 'bob' });
