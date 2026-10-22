@@ -320,6 +320,18 @@ transfer for the user — nothing is signed on Telos and nothing is claimed ther
   memo `hop.alcor:1:<0x address>|<wax domain>:<wax account>`. The Ethereum leg is
   then a withdrawal like any other, `w:<id>`: the user releases it from their own
   wallet (see *A withdrawal to Ethereum, start to finish*).
+- **Delivered by the courier.** The leg out may carry a fee, as a withdrawal
+  from Telos does: `<domain>:<recipient>:<fee>|<way back>`, for example
+  `hop.alcor:56:<0x address>:<fee>|<wax domain>:<wax account>`. The fee is in
+  canonical units of the token, out of the amount, and goes to whoever releases
+  the leg: the courier takes it from `/v1/pending` and releases it, so the user
+  needs no wallet or gas on the EVM chain. What to ask is the courier's
+  `GET /api/courier/v1/fees` → `withdrawal` for that chain and token. The
+  amount less the fee must still be at least the leg's minimum, or the hop is
+  refused. The way back carries no fee (`<domain>:<recipient>` only); a leg
+  voided over there comes back whole, its fee too. The leg's row on
+  `/v1/transfers` has the `fee`; above zero, the release button is the
+  courier's, until the leg is flagged `stuck`.
 - **Following it** is `GET /v1/hops?party=<address or account>` for a list, or
   `GET /v1/hops/<deposit key>` for one. Each is one journey with a `status` a
   person understands. On `/v1/transfers` the two legs are two rows, and each
@@ -349,7 +361,11 @@ deployed, and then that leg does not exist.
   if it is never swapped; `back` left out is `to`. Each is an account on the
   chain the order is on, or — **on Telos only** — a leg, `<domain>:<recipient>`,
   on a chain the bridge reaches from Telos: an EVM address with its chain id,
-  an account with an Antelope chain's domain. The least is written as
+  an account with an Antelope chain's domain. A leg may end in a courier fee,
+  `<domain>:<recipient>:<fee>`, in canonical units of the token delivered there
+  (the one bought for `to`, the one that arrived for `back`), and the token less
+  the fee must clear that leg's minimum; `back` left out is `to` without its fee.
+  The least is written as
   swap.alcor writes an asset, its decimals giving the precision; the deadline
   is unix seconds, at most `swaps.memo.maxWait` ahead.
 
@@ -366,11 +382,12 @@ deployed, and then that leg does not exist.
   its deadline.
 
 - **To a leg** — the swap in the middle. On Telos, a delivery to a leg is a
-  transfer to `hop.alcor` with that leg as both where it goes and where it goes
-  back to: a withdrawal to the leg, owned by the hop, with no fee. Following it
-  is that withdrawal, `swap.onward` (below). A withdrawal to an EVM chain is
-  released from the user's own wallet, as any withdrawal with no fee is; one
-  to an Antelope chain is delivered by the relayer. If the far side voids it,
+  transfer to `hop.alcor` with that leg as where it goes, and the same place
+  without a fee as where it goes back to: a withdrawal to the leg, owned by the
+  hop, with the leg's fee. Following it is that withdrawal, `swap.onward`
+  (below). A withdrawal to an EVM chain is released by the courier when it pays
+  a fee, else from the user's own wallet; one to an Antelope chain is delivered
+  by the relayer. If the far side voids it,
   `hop.alcor::recover` sends it to the same leg again. A delivery the ledger
   refuses for now — over the leg's `max_withdrawal`, the route closed or out of
   backing — leaves the order waiting until it fits or its deadline passes.
@@ -1048,7 +1065,7 @@ it and to sign it, or why it cannot go now.
 
 ```
 /v1/swap/plan?from=xpr:XPR&to=vaulta:A&amount=1233
-             &recipient=bob&sender=erin[&slippageBps=50][&deadlineSeconds=1800]
+             &recipient=bob&sender=erin[&slippageBps=50][&deadlineSeconds=1800][&courierFee=<units>]
 ```
 
 `from` and `to` are `<chain>:<SYMBOL>`, chains as `/v1/chains` names them
@@ -1057,6 +1074,10 @@ contract, `xpr:LOAN@loan.token`; the bridge's own tokens need only the symbol
 (`vaulta:A` is `A@core.vaulta`, `xpr:USDC` is `USDC@wrap.alcor`). On an EVM
 chain only the bridge's tokens, by symbol. `amount` is in whole tokens.
 `recipient` receives on the destination, `sender` is the user on the source.
+`courierFee`, only for an EVM destination, is what the last leg pays the courier
+to release it — canonical units of the token out, the courier's `/v1/fees`
+`withdrawal` for that chain and token. It goes into the leg's memo
+(`56:<address>:<fee>`) and out of `to`; left out or `0`, the user releases it.
 
 A journey swaps in up to two of three places, and the plan answers the way that
 delivers the most:
@@ -1119,8 +1140,10 @@ Never on Telos and at the destination both, and nothing swaps on an EVM chain.
   when only the user swaps.
 - `to.least` is what the recipient gets at the least; with no swap by the
   bridge it is exact.
-- `release`: `user` on an EVM destination (no fee, released from their wallet),
-  `relayer` on an Antelope one, null on Telos. `follow` says where to watch it:
+- `release`: `courier` on an EVM destination with a `courierFee` (released for
+  the fee), `user` on one without (released from their wallet), `relayer` on an
+  Antelope one, null on Telos. `courierFee` in the answer is that fee in the
+  token out, already taken out of `to.expected` and `to.least`; null for none. `follow` says where to watch it:
   the deposit on `/v1/transfers`, a hop on `/v1/hops/<deposit key>`, or a
   withdrawal from Telos on `/v1/transfers`.
 

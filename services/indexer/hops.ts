@@ -54,16 +54,17 @@ const place = (domain: string, recipient: string, chainOf: ChainOf): Place => ({
 });
 
 /**
- * The hop memo, `<domain>:<recipient>|<domain>:<recipient>[|<memo>]`, read for
- * display only — the contract is what decides whether it is valid. The third
- * part is the far side's memo and says nothing about where the hop goes.
- * Undefined when it is not that shape.
+ * The hop memo, `<domain>:<recipient>[:<fee>]|<domain>:<recipient>[|<memo>]`,
+ * read for display only — the contract is what decides whether it is valid.
+ * The fee is the courier's for the leg out and the transfer row of that leg
+ * carries it; the third part is the far side's memo. Neither says where the hop
+ * goes. Undefined when it is not that shape.
  */
 export function parseHopMemo(memo: string | null): { to: [string, string]; back: [string, string] } | undefined {
   const legs = memo?.split('|');
   if (!legs || legs.length < 2) return undefined;
   const [to, back] = legs.slice(0, 2).map((l) => l.split(':'));
-  if (to.length !== 2 || back.length !== 2) return undefined;
+  if ((to.length !== 2 && to.length !== 3) || back.length !== 2) return undefined;
   return { to: [to[0], to[1]], back: [back[0], back[1]] };
 }
 

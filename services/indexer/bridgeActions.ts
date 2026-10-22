@@ -102,7 +102,8 @@ export async function bridgeAbi(chain: SavannaChain): Promise<ABI> {
 
 /**
  * `bridgehop::bind`, field for field as the contract declares it. Written here rather than fetched: it is the one action read from that
- * contract, and a hop account that is not deployed yet has no ABI to fetch.
+ * contract, and a hop account that is not deployed yet has no ABI to fetch. `fee`, the leg's courier fee, came later: binds before it
+ * end at `back`, so it is read as an extension. Not kept: the leg's transfer row has it from `wdlog`.
  */
 const HOP_ABI = ABI.from({
   version: 'eosio::abi/1.2',
@@ -118,6 +119,7 @@ const HOP_ABI = ABI.from({
         { name: 'to', type: 'string' },
         { name: 'back_domain', type: 'uint64' },
         { name: 'back', type: 'string' },
+        { name: 'fee', type: 'int64$' },
       ],
     },
   ],

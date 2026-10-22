@@ -1417,7 +1417,7 @@
      "hop": "hop.alcor"
     },
     "hopMemo": {
-     "format": "<domain>:<recipient>|<domain>:<recipient>[|<memo>]",
+     "format": "<domain>:<recipient>[:<fee>]|<domain>:<recipient>[|<memo>]",
      "example": "1181148696416462999:route.alcor|1:0x…|alice|403.5737 TLM@alien.worlds|1760300000",
      "maxBytes": 256
     },

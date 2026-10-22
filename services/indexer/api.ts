@@ -183,7 +183,7 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
         `${base}/v1/handovers?after=<generation>[&limit=50]`,
         `${base}/v1/hops`,
         `${base}/v1/swap/quote?chain=&tokenIn=&tokenOut=&amountIn=[&slippageBps=50]`,
-        `${base}/v1/swap/plan?from=&to=&amount=&recipient=&sender=[&slippageBps=50][&deadlineSeconds=1800]`,
+        `${base}/v1/swap/plan?from=&to=&amount=&recipient=&sender=[&slippageBps=50][&deadlineSeconds=1800][&courierFee=]`,
         `${base}/v1/hops/<key>`,
         `${base}/v1/accounts/<account>`,
         `${base}/v1/accounts/<account>/transfers`,
@@ -263,6 +263,7 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
         sender: q.get('sender') ?? '',
         slippageBps: Number(q.get('slippageBps') ?? 50),
         deadlineSeconds: Number(q.get('deadlineSeconds') ?? 1800),
+        courierFee: q.get('courierFee') ?? undefined,
       }, {
         routes: all as PlanRoute[],
         chains: current.sources as PlanChain[],

@@ -88,8 +88,13 @@ test('the hop memo is read for display, and only in its one shape', () => {
   assert.deepEqual(parseHopMemo(`${WAX}:alice.wam|1:0xabc`), { to: [WAX, 'alice.wam'], back: ['1', '0xabc'] });
   assert.equal(parseHopMemo('alice.wam'), undefined);
   assert.equal(parseHopMemo(`${WAX}:alice.wam`), undefined);
-  assert.equal(parseHopMemo(`${WAX}:a:5|1:b`), undefined);
+  assert.equal(parseHopMemo(`${WAX}:a|1:b:5`), undefined, 'the way back carries no fee');
+  assert.equal(parseHopMemo(`${WAX}:a:5:6|1:b`), undefined);
   assert.equal(parseHopMemo(null), undefined);
+});
+
+test('a courier fee on the leg out is no part of where it goes', () => {
+  assert.deepEqual(parseHopMemo(`56:0xabc:250000|${WAX}:alice`), { to: ['56', '0xabc'], back: [WAX, 'alice'] });
 });
 
 test('a hop memo with a memo for the far side reads the same two legs', () => {

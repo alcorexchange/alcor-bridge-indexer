@@ -52,6 +52,13 @@ export type PlanRequest = {
   slippageBps: number;
   /** How long a swap may wait for its price, from now. */
   deadlineSeconds: number;
+  /**
+   * What the last leg pays the courier to deliver it, when it ends on an EVM
+   * chain: canonical units of the token delivered there, the `withdrawal` of
+   * the courier's `/v1/fees`. Out of what the recipient gets. Left out or 0,
+   * the recipient releases it themselves.
+   */
+  courierFee?: string;
 };
 
 /** A row of `/v1/routes`, the fields read here. */
@@ -135,6 +142,8 @@ const TELOS: PlanChain = { id: SETTLEMENT_CHAIN, name: 'Telos', kind: 'antelope'
 const isAntelope = (c: PlanChain): boolean => c.kind === 'antelope';
 const isSui = (c: PlanChain): boolean => c.kind === 'sui';
 const isNear = (c: PlanChain): boolean => c.kind === 'near';
+/** An EVM chain, where the courier delivers a withdrawal that pays it: neither Antelope, Sui nor NEAR. */
+const isEvm = (c: PlanChain): boolean => !isAntelope(c) && !isSui(c) && !isNear(c);
 const domainOf = (c: PlanChain): string => String(c.domain ?? c.chainId);
 const routeOf = (chain: string): string | null => ANTELOPE_SWAPS[chain]?.route ?? null;
 
@@ -167,6 +176,21 @@ function party(c: PlanChain, text: string, what: string): string {
 
 /** `party` on `c` as the ledger stores it: a NEAR account is `0x` and the sha256 of its id. */
 const onLedger = (c: PlanChain, party: string): string => (isNear(c) ? `0x${nearAddress(party)}` : party);
+
+/** A leg, `<domain>:<recipient>[:<fee>]`: the fee field only when there is one, as bridgehop writes it. */
+const legText = (c: PlanChain, recipient: string, fee: bigint): string =>
+  `${domainOf(c)}:${recipient}${fee > 0n ? `:${fee}` : ''}`;
+
+/** The request's courier fee: none, or canonical units on a last leg to an EVM chain. */
+function courierFeeOf(text: string | undefined, target: PlanChain): bigint {
+  if (text === undefined || text === '') return 0n;
+  if (!/^\d{1,19}$/.test(text)) throw new PlanRefused('courierFee is a whole number of canonical units, as /v1/fees gives it');
+  const fee = BigInt(text);
+  if (fee > 0n && (target.id === SETTLEMENT_CHAIN || !isEvm(target))) {
+    throw new PlanRefused(`courierFee is for a last leg to an EVM chain; on ${target.name} the bridge delivers it, or there is no leg`);
+  }
+  return fee;
+}
 
 /** `units` at `precision` decimals with every decimal written, as an Antelope asset is: `0.15418631`. */
 function decimalFixed(units: bigint, precision: number): string {
@@ -346,6 +370,8 @@ type Job = {
   sender: string;
   slippageBps: number;
   deadline: number;
+  /** Canonical units of the token out for the courier, out of what the recipient gets; 0 for none. */
+  courierFee: bigint;
 };
 
 export async function swapPlan(r: PlanRequest, ctx: PlanContext) {
@@ -371,6 +397,7 @@ export async function swapPlan(r: PlanRequest, ctx: PlanContext) {
 
   const recipient = party(target, r.recipient, 'recipient');
   const sender = party(source, r.sender, 'sender');
+  const courierFee = courierFeeOf(r.courierFee, target);
 
   const precision = await precisionOf(net, ctx.read, source, input);
   let amountIn: bigint;
@@ -396,7 +423,7 @@ export async function swapPlan(r: PlanRequest, ctx: PlanContext) {
   };
   const job: Job = {
     ctx: { ...ctx, quote }, net, source, target, input, output, precision, amountIn, recipient, sender,
-    slippageBps: r.slippageBps, deadline: ctx.now + r.deadlineSeconds,
+    slippageBps: r.slippageBps, deadline: ctx.now + r.deadlineSeconds, courierFee,
   };
   const tried = await Promise.all(ways.map((way) => planWay(job, way).then(
     (plan) => ({ way, plan, error: null }),
@@ -481,7 +508,7 @@ function legLeast(memo: string): string | null {
 
 /** One way planned through, or why it does not go now. */
 async function planWay(job: Job, way: Way) {
-  const { ctx, net, source, target, input, output, recipient, sender, deadline, slippageBps } = job;
+  const { ctx, net, source, target, input, output, recipient, sender, deadline, slippageBps, courierFee } = job;
   const swaps: SwapStep[] = [];
   const parts: { what: string; seconds: number }[] = [];
   const carrierPrecision = net.precision(way.carrier);
@@ -540,6 +567,9 @@ async function planWay(job: Job, way: Way) {
       if (!outbound.open) return no(outbound.reason ?? `${output.symbol} to ${target.name} is closed`);
       if (outbound.precision !== decimals) return no(`${output.symbol} on Telos and on ${target.name} differ in precision`);
       if (least < BigInt(outbound.min)) return no(`the least out ${outFmt(least, decimals)} is under ${target.name}'s minimum, ${outFmt(outbound.min, decimals)}`);
+      if (least - courierFee < BigInt(outbound.min)) {
+        return no(`the least out less the courier's fee, ${outFmt(least - courierFee, decimals)}, is under ${target.name}'s minimum, ${outFmt(outbound.min, decimals)}`);
+      }
       if (outbound.max !== null && expected > BigInt(outbound.max)) return no(`at most ${outFmt(outbound.max, decimals)} goes to ${target.name} now`);
     }
     swaps.push({
@@ -547,7 +577,7 @@ async function planWay(job: Job, way: Way) {
       expected: assetText(expected, decimals, output.symbol), least: assetText(least, decimals, output.symbol),
       priceImpact: q.priceImpact, pools: q.pools,
     });
-    const toPlace = target.id === SETTLEMENT_CHAIN ? recipient : `${domainOf(target)}:${onLedger(target, recipient)}`;
+    const toPlace = target.id === SETTLEMENT_CHAIN ? recipient : legText(target, onLedger(target, recipient), courierFee);
     back = homeLeg;
     memo = `${toPlace}|${assetText(least, decimals, output.symbol)}@${bought.contract}|${deadline}|${back}`;
     telosTo = route;
@@ -588,22 +618,26 @@ async function planWay(job: Job, way: Way) {
       expected = crossing;
       least = crossing;
       decimals = carrierPrecision;
+      const onward = net.route(way.carrier, SETTLEMENT_CHAIN, target.id);
+      if (courierFee > 0n && onward && crossing - courierFee < BigInt(onward.min)) {
+        return no(`${fmtCarrier(crossing)} less the courier's fee is under ${target.name}'s minimum, ${fmtCarrier(BigInt(onward.min))}`);
+      }
     }
 
     if (source.id === SETTLEMENT_CHAIN) {
       // A withdrawal, `<domain>:<recipient>[:<fee>[:<memo>]]`: its memo is what the far side pays out with.
       telosTo = ctx.settlement.bridge;
-      telosMemo = memo ? `${domainOf(target)}:${payee}:0:${memo}` : `${domainOf(target)}:${payee}`;
+      telosMemo = memo ? `${domainOf(target)}:${payee}:0:${memo}` : legText(target, payee, courierFee);
       follow = memo ? 'the withdrawal on /v1/transfers: its swap, once paid out to route.alcor' : 'the withdrawal on /v1/transfers';
     } else if (!hop) {
       telosTo = recipient;
       telosMemo = '';
       follow = 'the deposit on /v1/transfers';
     } else {
-      // A hop: where it goes, where it goes back to, and the memo the far side pays out with.
+      // A hop: where it goes, with the courier's fee, where it goes back to, and the memo the far side pays out with.
       if (!ctx.settlement.hop) return no('bridgehop is not deployed on Telos');
       telosTo = ctx.settlement.hop;
-      telosMemo = `${domainOf(target)}:${payee}|${homeLeg}${memo ? `|${memo}` : ''}`;
+      telosMemo = `${legText(target, payee, courierFee)}|${homeLeg}${memo ? `|${memo}` : ''}`;
       follow = memo ? 'the hop on /v1/hops/<deposit key>: its swap, then delivered' : 'the hop on /v1/hops/<deposit key>';
     }
   }
@@ -640,6 +674,10 @@ async function planWay(job: Job, way: Way) {
     if (bytes > ROUTE_MEMO.maxBytes) return no(`a memo is ${bytes} bytes, over ${ROUTE_MEMO.maxBytes}`);
   }
 
+  // What the recipient gets: the courier's fee comes out of the last leg.
+  expected -= courierFee;
+  least -= courierFee;
+
   return {
     possible: true as const,
     from: {
@@ -662,12 +700,14 @@ async function planWay(job: Job, way: Way) {
     memo,
     back,
     sign,
+    /** What the last leg pays the courier, in the token out, already out of `to`; null when it pays none. */
+    courierFee: courierFee > 0n ? decimalAmount(courierFee, decimals) : null,
     /**
-     * Who finishes the last leg: on an EVM chain the withdrawal carries no fee,
-     * so the user releases it from their own wallet; on an Antelope chain the
-     * relayer delivers it.
+     * Who finishes the last leg: on an Antelope chain the relayer; on an EVM
+     * chain the courier when the leg pays it, else the user from their own
+     * wallet.
      */
-    release: target.id === SETTLEMENT_CHAIN ? null : isAntelope(target) ? 'relayer' : 'user',
+    release: target.id === SETTLEMENT_CHAIN ? null : isAntelope(target) ? 'relayer' : courierFee > 0n ? 'courier' : 'user',
     eta: { seconds: parts.reduce((a, p) => a + p.seconds, 0), parts },
     follow,
   };

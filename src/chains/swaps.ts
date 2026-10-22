@@ -104,9 +104,9 @@ export const KYBER = {
   native: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
 } as const;
 
-/** The hop memo bridgehop reads, which a swap at the far end rides in as its third part. */
+/** The hop memo bridgehop reads, the courier's fee on the leg out, which a swap at the far end rides in as its third part. */
 export const HOP_MEMO = {
-  format: '<domain>:<recipient>|<domain>:<recipient>[|<memo>]',
+  format: '<domain>:<recipient>[:<fee>]|<domain>:<recipient>[|<memo>]',
   example: '1181148696416462999:route.alcor|1:0x…|alice|403.5737 TLM@alien.worlds|1760300000',
   maxBytes: 256,
 } as const;

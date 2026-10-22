@@ -76,3 +76,32 @@ test('an action this build cannot decode is skipped, not fatal', () => {
   ];
   assert.deepEqual(readBridgeEvents(abi, BRIDGE, traces).map((e) => e.kind), ['refund']);
 });
+
+/** `bind` as the hop contract packs it: before the courier fee, and with it. */
+const bindAbi = (withFee: boolean) => ABI.from({
+  version: 'eosio::abi/1.2',
+  structs: [{
+    name: 'bind',
+    base: '',
+    fields: [
+      { name: 'id', type: 'uint64' }, { name: 'prev', type: 'uint64' }, { name: 'quantity', type: 'asset' },
+      { name: 'to_domain', type: 'uint64' }, { name: 'to', type: 'string' },
+      { name: 'back_domain', type: 'uint64' }, { name: 'back', type: 'string' },
+      ...(withFee ? [{ name: 'fee', type: 'int64' }] : []),
+    ],
+  }],
+  actions: [{ name: 'bind', type: 'bind', ricardian_contract: '' }],
+});
+
+test('a hop is read from a bind with a courier fee and from one before it', () => {
+  const bind = { id: 7, prev: 0, quantity: '2.000000 USDC', to_domain: 56, to: '0xabc', back_domain: 1181148696416462999n, back: 'alice' };
+  const hop = (withFee: boolean, trxId: string): ActionTrace => ({
+    receiver: 'hop.alcor', account: 'hop.alcor', name: 'bind', trxId,
+    data: Serializer.encode({ object: withFee ? { ...bind, fee: 250000 } : bind, type: 'bind', abi: bindAbi(withFee) }).hexString,
+  } as ActionTrace);
+  const events = readBridgeEvents(abi, BRIDGE, [hop(false, 'old'), hop(true, 'new')], 'hop.alcor') as any[];
+  assert.deepEqual(events.map((e) => [e.kind, e.id, e.to, e.back, e.trxId]), [
+    ['hop', 7, '0xabc', 'alice', 'old'],
+    ['hop', 7, '0xabc', 'alice', 'new'],
+  ]);
+});

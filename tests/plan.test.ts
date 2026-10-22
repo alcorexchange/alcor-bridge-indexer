@@ -206,6 +206,43 @@ test('swapped at the source only: XPR into USDT on XPR, hopped to BSC', async ()
   assert.equal(plan.release, 'user');
 });
 
+test('a courier fee on the last leg to an EVM chain: in its memo, out of what the recipient gets', async () => {
+  const swapped = await swapPlan(ask({ courierFee: '250000' }), ctx(pool108));
+  assert.equal(swapped.possible, true);
+  if (!swapped.possible) return;
+  assert.equal(swapped.memo, `56:${USER}:250000|0.15418246 BNB@wrap.alcor|${DEADLINE}|137:${USER}`, 'the swap on Telos delivers with it');
+  assert.equal(swapped.to.expected, '0.15245725');
+  assert.equal(swapped.to.least, '0.15168246');
+  assert.equal(swapped.courierFee, '0.0025');
+  assert.equal(swapped.release, 'courier');
+
+  const quote = quoter({
+    'xpr xpr-eosio.token usdt-wrap.alcor': swapOf('2.79', 6, [11711], [
+      { tokenContract: 'eosio.token', to: 'swap.alcor', quantity: '1233.0000 XPR', memo: 'swapexactin#11711#<account>#2.776050 USDT@wrap.alcor#0' },
+    ]),
+  });
+  const hopped = await swapPlan(ask({ from: 'xpr:XPR', to: 'bsc:USDT', sender: 'erin', courierFee: '30000' }), ctx(quote));
+  assert.equal(hopped.possible, true);
+  if (!hopped.possible || hopped.sign.kind !== 'actions') return;
+  assert.equal(hopped.sign.actions[1].data.memo, `hop.alcor:56:${USER}:30000|${XPR}:erin`, 'the hop\'s leg out carries it, its way back none');
+  assert.equal(hopped.to.least, '2.74605');
+  assert.equal(hopped.release, 'courier');
+
+  const zero = await swapPlan(ask({ courierFee: '0' }), ctx(pool108));
+  assert.equal(zero.possible && zero.release, 'user', 'a fee of 0 is no fee');
+  assert.equal(zero.possible && zero.memo, `56:${USER}|0.15418246 BNB@wrap.alcor|${DEADLINE}|137:${USER}`);
+
+  const atFloor = await swapPlan(ask({ from: 'xpr:XPR', to: 'bsc:USDT', sender: 'erin', courierFee: '1776050' }), ctx(quote));
+  assert.equal(atFloor.possible && atFloor.to.least, '1', 'the recipient gets BSC\'s minimum exactly');
+  const under = await swapPlan(ask({ from: 'xpr:XPR', to: 'bsc:USDT', sender: 'erin', courierFee: '1776051' }), ctx(quote));
+  assert.equal(under.possible, false, 'a unit more and the hop does not go');
+  const underOnTelos = await swapPlan(ask({ courierFee: '15408247' }), ctx(pool108));
+  assert.match((underOnTelos as { reason: string }).reason, /least out less the courier's fee, 0.00009999 BNB, is under/);
+
+  await assert.rejects(swapPlan(ask({ from: 'xpr:XPR', to: 'vaulta:A', sender: 'erin', recipient: 'bob', courierFee: '1' }), ctx(xprToA())), /courierFee is for a last leg to an EVM chain/);
+  await assert.rejects(swapPlan(ask({ courierFee: '0.5' }), ctx(pool108)), /whole number of canonical units/);
+});
+
 test('any token on an Antelope chain, named with its contract', async () => {
   const quote = quoter({
     'xpr loan-loan.token usdc-wrap.alcor': swapOf('5', 6, [9], [
