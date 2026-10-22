@@ -182,6 +182,9 @@ function seed(store: Store): void {
   // A BSC deposit waiting half a day: seconds of finality, so no ancestry clock.
   deposit('56', 15, { amount: '7000000', src_block: 49_999_990, src_time: NOW - 12 * 3600 });
   withdrawal(16, '1', { amount: '3000000', deadline: NOW + 86_400, src_block: 2500 });
+  // The courier's for an hour and still not released: late, and anyone's to send.
+  withdrawal(17, '1', { status: 'provable', amount: '3000000', fee: '21000', proof_at: NOW - 3600,
+    deadline: NOW + 86_400, src_block: 1200 });
 
   const proveroot = {
     payer: 'eth.lc.alcor', signed_header: { slot: 1 }, sig: 's', bits: 'b', finalized: [], finality_branch: [],
@@ -214,6 +217,7 @@ function seed(store: Store): void {
   });
   for (const id of [8, 9]) store.putProof(withdrawalKey(id), 'withdrawal', artifact('1'));
   store.putProof(withdrawalKey(16), 'withdrawal', artifact('1', 2500));
+  store.putProof(withdrawalKey(17), 'withdrawal', artifact('1'));
   store.putProof(withdrawalKey(10), 'withdrawal', artifact('999'));
   // A proof with no row behind it.
   store.putProof(withdrawalKey(11), 'withdrawal', artifact('1'));
@@ -230,6 +234,7 @@ const PATHS = [
     depositKey('1', 1), depositKey('1', 2), depositKey('1', 3), depositKey('137', 4), depositKey('56', 5),
     depositKey('137', 6), withdrawalKey(7), withdrawalKey(8), withdrawalKey(9), withdrawalKey(10),
     depositKey(WAX, 12), withdrawalKey(13), depositKey('1', 14), depositKey('56', 15), withdrawalKey(16),
+    withdrawalKey(17),
   ].map((k) => `/v1/transfers/${encodeURIComponent(k)}`),
   '/v1/transfers/nope',
   '/v1/pending',

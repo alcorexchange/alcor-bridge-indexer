@@ -83,7 +83,7 @@ Computed per request, because they are functions of the clock. Render these:
 |---|---|
 | `unfrozen` | burned, no proof stored. The one with a real clock on it |
 | `past-deadline` | `release` is refused from here on; `expire` is what unlocks the refund |
-| `stuck` | proved and uncredited for over half an hour |
+| `stuck` | proved for over half an hour and still waiting on the bridge's own pusher: a deposit uncredited, or a withdrawal with a delivery `fee` the courier has not released. Offer the push to anyone from here |
 | `rolled-back` | voided on the far side; the refund is what is outstanding |
 | `held` | a parked deposit still not handed on after ten minutes. The funds are on Telos and someone has to look |
 | `over-limit` | a deposit larger than its route's cap leaves room for. Telos will not credit it as things stand |
@@ -881,10 +881,14 @@ have. `limit` defaults to 50, caps at 500. Rows are newest first.
   "symbol": "WAX", "precision": 8, "token": "00a6823403ea30550857415800000000",
   "src_block": 458605094, "src_time": 1790789587, "src_tx": "5ac0df3b…",
   "dst_block": 491538543, "dst_time": 1790789646, "dst_tx": "b1879643…",
-  "deadline": null, "secondsToDeadline": null, "memo": null,
+  "deadline": null, "secondsToDeadline": null, "memo": null, "fee": null,
   "flags": [], "hasProof": false, "track": null
 }
 ```
+
+`fee` is a withdrawal's delivery fee, canonical units out of `amount`, signed
+with the burn. Above zero the courier releases it and the owner has nothing to
+send; zero or null leaves the release to the owner.
 
 **What to render.** `chain` is the far chain by its registry id (`mainnet`,
 `wax`), `asset` the token as a person knows it — `symbol`, `precision`, and

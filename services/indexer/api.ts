@@ -64,8 +64,12 @@ import { swapOfPayout, type SwapView } from './swaps.ts';
 import { evmSwapQuote, QuoteRefused } from './quote.ts';
 import { alcorQuote, PlanRefused, swapPlan, type ChainReader, type PlanChain, type PlanRoute } from './plan.ts';
 
-/** How long a proved deposit may sit uncredited before a UI should say so. */
-const DEPOSIT_STUCK_SECONDS = 30 * 60;
+/**
+ * How long a proved crossing may wait on the bridge's own pusher before a UI
+ * should say so and offer it to anyone: the closer for a deposit, the courier
+ * for a withdrawal burned with a delivery fee.
+ */
+const STUCK_SECONDS = 30 * 60;
 
 /** A domain this instance follows as an EVM source. */
 type EvmDomain = Extract<Domain, { kind: 'evm' }>;
@@ -1107,8 +1111,11 @@ function decorate(deps: Deps, row: TransferRow): DecoratedTransfer {
     if (!hasProof && far?.kind !== 'antelope') flags.push('unfrozen');
     if (secondsToDeadline !== null && secondsToDeadline <= 0) flags.push('past-deadline');
   }
-  if (row.direction === 'deposit' && row.status === 'provable' && now - (row.proof_at ?? now) > DEPOSIT_STUCK_SECONDS) {
-    flags.push('stuck');
+  if (row.status === 'provable' && now - (row.proof_at ?? now) > STUCK_SECONDS) {
+    // A withdrawal with no fee waits on its owner, not on the bridge: it is
+    // never late, only not sent yet.
+    const courier = row.direction === 'withdrawal' && BigInt(row.fee ?? '0') > 0n;
+    if (row.direction === 'deposit' || courier) flags.push('stuck');
   }
   if (row.status === 'expired') flags.push('rolled-back');
   const hold = holdOf(row, holdContext(deps));
