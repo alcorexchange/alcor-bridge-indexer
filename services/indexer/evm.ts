@@ -854,12 +854,17 @@ export class EvmFollower {
           dst_time: found?.at ?? null,
           dst_tx: found?.tx ?? null,
         });
-        this.store.incident(
-          'settled-elsewhere',
-          `withdrawal ${t.ref} is settled on the vault (${found?.status ?? 'released'}` +
-            `${found ? ` in block ${found.block}` : ', event not found in the scanned range'}), ` +
-            `but was still listed as ${t.status}`,
-        );
+        // A settlement in a block the log poller has not reached yet is a race
+        // this pass merely won (w:364 on BSC, 2026-10-22: paid twelve seconds
+        // before the next poll). Only one behind the poller was missed.
+        if (!found || found.block <= this.state.at) {
+          this.store.incident(
+            'settled-elsewhere',
+            `withdrawal ${t.ref} is settled on the vault (${found?.status ?? 'released'}` +
+              `${found ? ` in block ${found.block}` : ', event not found in the scanned range'}), ` +
+              `but was still listed as ${t.status}`,
+          );
+        }
         console.log(`[evm:${this.chain.id}] withdrawal ${t.ref} was already ${found?.status ?? 'settled'} on chain`);
         fixed++;
       } catch (err) {
