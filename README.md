@@ -119,23 +119,30 @@ need:
 
 | what | env |
 |---|---|
-| a WAX state-history endpoint | `WAX_SHIP_URL` |
+| a WAX state-history endpoint, with traces | `WAX_SHIP_URL` |
 | a WAX HTTP API | `WAX_RPC` (default `https://wax.eosusa.io`) |
-| a WAX Hyperion | `WAX_HISTORY` (default `https://wax.eosusa.io`) |
 
 XPR Network is the same kind of chain and is followed the same way, under the
-prefix `XPR_` (`XPR_SHIP_URL`, `XPR_RPC`, `XPR_HISTORY`); the chains themselves
+prefix `XPR_` (`XPR_SHIP_URL`, `XPR_RPC`); the chains themselves
 are listed in `src/chains/antelope.ts`. Each keeper has the same first-start
 question as the Telos tree. See section 3.
 
-Vaulta runs Savanna and needs no keeper and no state-history here: its
-relayers prove everything. The indexer only reads its tables, so an HTTP API is
-all it takes, and giving one is what turns Vaulta on:
+Vaulta runs Savanna and needs no keeper: its relayers prove everything. Giving
+its HTTP API is what turns it on, and its state-history socket is required with
+it:
 
 | what | env |
 |---|---|
 | a Vaulta HTTP API | `VAULTA_RPC` (no default; e.g. `https://eos.api.eosnation.io`) |
-| a Vaulta Hyperion | `VAULTA_HISTORY` (default `https://eos.eosusa.io,https://eos.hyperion.eosrio.io`) |
+| a Vaulta state-history endpoint, with traces | `VAULTA_SHIP_URL` |
+
+On every Antelope chain, Telos included, the indexer keeps its own history of
+the few actions it reads — bridgeroute's orders, the vault's deposits and
+settlements, the bridge's credits and burns — straight off that socket, from
+irreversible blocks (`services/indexer/actions.ts`). No Hyperion is asked. A
+socket that no longer holds the blocks the history needs next (the indexer was
+down longer than the node keeps traces) is an alarm on `/health` until a person
+fills the gap.
 
 ### Hardware
 
@@ -310,7 +317,7 @@ and `CHAIN` (default `mainnet`, the primary EVM chain; the others come from
 | `ARCHIVE_URLS_<chainId>` | registry | for old receipts |
 | `BEACON_URLS` | registry | Ethereum beacon API |
 | `EVM_POLL_MS` / `EVM_POLL_MS_<chainId>` | `12000` | log poll interval. Every poll is a billed request on a paid endpoint |
-| `TELOS_HISTORY` | registry | Hyperion on Telos, for finalizer-key proofs of possession |
+| `TELOS_HISTORY` | registry | Hyperion on Telos, for finalizer-key proofs of possession: the one thing still read from Hyperion |
 
 ### WAX, XPR Network and Vaulta
 
@@ -319,9 +326,8 @@ One set per chain in `src/chains/antelope.ts`, under its prefix (`WAX_`, `XPR_`,
 
 | variable | default | |
 |---|---|---|
-| `<PREFIX>_SHIP_URL` | unset (chain off) | WAX, XPR: the chain's state-history, for its keeper; this turns the chain on |
+| `<PREFIX>_SHIP_URL` | unset | the chain's state-history, with traces: the indexer's own history of it, and for WAX and XPR their keeper. For WAX and XPR this turns the chain on; Vaulta requires it once on |
 | `<PREFIX>_RPC` | `https://wax.eosusa.io` WAX, `https://proton.eosusa.io` XPR; Vaulta unset (chain off) | the chain's HTTP API; for Vaulta this turns the chain on |
-| `<PREFIX>_HISTORY` | `https://wax.eosusa.io`, `https://proton.eosusa.io`, `https://eos.eosusa.io,https://eos.hyperion.eosrio.io` | the chain's Hyperion |
 | `<PREFIX>_BLOCKROOT_SEED` | `data/<chain>-blockroot-seed.json` | WAX, XPR: the keeper's verified starting state |
 
 ### Tuning (defaults are what production runs)
@@ -341,7 +347,7 @@ One set per chain in `src/chains/antelope.ts`, under its prefix (`WAX_`, `XPR_`,
 | variable | why |
 |---|---|
 | `PROOF_PAYER` | names the account that served proofs bill RAM to. It only matters to whoever pushes those proofs. With it unset, the contracts pay for themselves |
-| `RELAYER_DIR` | the crossings files of the operator's own WAX, XPR and Vaulta relayers (`<chain>-in/`, `<chain>-out/`). With a chain on and this unset, its half of a transfer is filled from its Hyperion (`<PREFIX>_HISTORY`) |
+| `RELAYER_DIR` | the crossings files of the operator's own WAX, XPR and Vaulta relayers (`<chain>-in/`, `<chain>-out/`). With a chain on and this unset, its half of a transfer is filled from the indexer's own history of the chain, on the next reconcile pass |
 | `FALLBACK_PROXY`, `PROXY_ALL` | an HTTP CONNECT proxy a request that stalls is retried through once; unset, no retry. `PROXY_ALL=1` sends everything through it from the start, for a host behind DPI |
 
 ## 6. Is it healthy

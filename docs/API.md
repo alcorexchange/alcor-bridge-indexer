@@ -466,6 +466,7 @@ look at:
   "alarms": [],
   "savanna": { "chain": "telos", "at": 489599838, "head": 489599839, "behind": 1, "mismatches": 0 },
   "sources": [{ "chain": "mainnet", "at": 26091656, "head": 26091656, "behind": 0, "wiring": "as configured" }],
+  "histories": [{ "chain": "telos", "at": 495384480, "lib": 495384482, "behind": 2, "lastError": null }],
   "trustedRoots": 2,
   "committee": { "stored": 1363, "head": 1363, "lagPeriods": 0 },
   "ram": [
@@ -487,6 +488,11 @@ default) is an alarm too. Read once a minute. The relayers' own accounts pay for
 every block they prove to a light client; list them in `RELAYER_RAM_ACCOUNTS` as
 `<chain>:<account>` pairs (`telos:payer,xpr:relayer`) and each one under
 `RELAYER_RAM_ALARM_BYTES` (32 000 by default) is an alarm as well.
+
+`histories` is the indexer's own history of each Antelope chain, read from
+irreversible blocks of its state-history socket. One more than ten minutes
+behind its chain's last irreversible block, or not advancing for ten, is an
+alarm; `lastError` says why — a lost socket, or a gap the node no longer holds.
 
 A crossing waiting on the bridge three times past its route's usual time, and at
 least fifteen minutes, is an alarm whatever stopped it — a relayer down or out of
@@ -919,10 +925,10 @@ Both transactions travel with every crossing: `src_tx` where it started and
 — burned here, expired there, reissued here — and that one is `refund_tx`.
 
 They are filled from the stream as the actions go by. A crossing the stream did
-not see whole — made before this was built, or while the indexer was down — is
-completed from Hyperion on the next reconcile pass: the token and the crediting
-transaction from Telos's `credit`, the WAX transactions from the vault's
-`deplog` and `release`. So every row ends up with both halves.
+not see whole is completed from the indexer's own history of each chain on the
+next reconcile pass: the token and the crediting transaction from Telos's
+`credit`, the WAX transactions from the vault's `deplog` and `release`. So every
+row ends up with both halves.
 
 `src_*` is where the crossing started, `dst_*` where it was settled. Times are
 unix seconds and come from the **block**, not from when the indexer saw it.

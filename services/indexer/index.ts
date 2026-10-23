@@ -8,10 +8,12 @@
  * proofs merely get slower to assemble. That property is worth more than any
  * feature here and is the reason it stays an observer.
  *
- * Three loops, deliberately independent:
+ * The loops, deliberately independent:
  *
  *   savanna     the state-history stream; reconnects and resumes by itself
  *   evm         a log poller; catches up in spans and remembers its position
+ *   history     each Antelope chain's state-history again, for the few actions
+ *               of our contracts the indexer keeps as its own history
  *   reconcile   the slow, authoritative pass over both chains' own tables,
  *               which is what finds anything the two streams missed
  *
@@ -22,8 +24,8 @@
  *   node --experimental-strip-types services/indexer/index.ts [--check]
  */
 
-import { loadConfig } from './config.ts';
-import { Store } from './db.ts';
+import { loadConfig, SETTLEMENT_CHAIN } from './config.ts';
+import { Store, type ChainAction } from './db.ts';
 import { SettlementFollower } from './savanna.ts';
 import { EvmFollower } from './evm.ts';
 import { resolveRootBlocks } from './roots.ts';
@@ -31,10 +33,12 @@ import { BlockrootKeeper } from './blockroot.ts';
 import { ingestCrossings } from './crossings.ts';
 import { followSuiVault } from './suiVault.ts';
 import { followNearVault } from './nearVault.ts';
-import { crossingsFiles } from '../../src/chains/antelope.ts';
+import { antelopeVaults, crossingsFiles } from '../../src/chains/antelope.ts';
+import { getTableRows } from '../../src/net/antelope.ts';
 import { backfillFromHistory } from './history.ts';
 import { createApi } from './api.ts';
-import { followSwaps, swapChains } from './swaps.ts';
+import { applySwapActions, routeOf } from './swaps.ts';
+import { ActionFollower, type HistorySource, type Watch } from './actions.ts';
 
 const cfg = loadConfig();
 const startedAt = Date.now();
@@ -59,7 +63,7 @@ if (process.argv.includes('--check')) {
           chain: a.chain.id,
           consensus: a.chain.consensus,
           rpc: a.rpc,
-          history: a.history,
+          ship: a.ship,
           keeper: a.keeper ? { ship: a.keeper.ship, dir: a.keeper.dir, seed: a.keeper.seedFile } : null,
         })),
         relayers: cfg.relayerDir ?? null,
@@ -102,9 +106,47 @@ const evms = cfg.sources.map((source) => new EvmFollower(cfg, store, source));
  */
 const keepers = new Map(cfg.antelope.flatMap((a) => (a.keeper ? [[a.chain.id, new BlockrootKeeper(a.keeper)] as const] : [])));
 
+/** bridgeroute's orders on `chain`, applied as its history reads them. */
+const swapsOn = (chain: string) => (actions: ChainAction[]) => {
+  const n = applySwapActions(store, chain, actions.filter((a) => a.account === routeOf(chain)));
+  if (n) console.log(`[swaps] ${chain}: ${n} bridgeroute action(s)`);
+};
+
+/** Accounts mapped to the actions read from each, leaving out a contract not deployed on the chain. */
+const watching = (...pairs: [string | undefined, string[]][]): Watch =>
+  Object.fromEntries(pairs.filter((p): p is [string, string[]] => p[0] !== undefined));
+
+/**
+ * Our own history of each Antelope chain (actions.ts): on Telos the bridge's
+ * credits and burns, elsewhere the vault's deposits and settlements, and
+ * bridgeroute's orders everywhere it is deployed.
+ */
+const historySources: HistorySource[] = [
+  {
+    chain: SETTLEMENT_CHAIN,
+    ship: cfg.ship,
+    rpc: cfg.savanna,
+    watch: async () => watching([cfg.savanna.accounts.bridge, ['credit', 'wdlog']], [routeOf(SETTLEMENT_CHAIN), ['opened', 'closed']]),
+    onActions: swapsOn(SETTLEMENT_CHAIN),
+  },
+  ...cfg.antelope.map((a) => ({
+    chain: a.chain.id,
+    ship: a.ship,
+    rpc: { rpc: [a.rpc] },
+    watch: async () => {
+      // The vault the ledger's routes name for this chain, so a redeployment is followed.
+      const routes = await getTableRows(cfg.savanna, { code: cfg.savanna.accounts.bridge, table: 'routes' });
+      const vault = antelopeVaults(routes).get(a.chain.domain)?.account;
+      return watching([vault, ['deplog', 'release', 'expire']], [routeOf(a.chain.id), ['opened', 'closed']]);
+    },
+    onActions: swapsOn(a.chain.id),
+  })),
+];
+const histories = historySources.map((source) => new ActionFollower(source, store));
+
 // The API comes up first and stays up. Everything else is allowed to be broken
 // while it reports that it is.
-const api = createApi({ cfg, store, savanna, evms, keepers, startedAt });
+const api = createApi({ cfg, store, savanna, evms, keepers, histories, startedAt });
 api.listen(cfg.port, cfg.host, () => console.log(`[api] listening on ${cfg.host}:${cfg.port}`));
 
 let stopping = false;
@@ -137,6 +179,7 @@ async function supervise(name: string, run: () => Promise<void>): Promise<void> 
 void supervise('savanna', () => savanna.start());
 for (const follower of evms) void supervise(`evm:${follower.id}`, () => follower.start());
 for (const [id, keeper] of keepers) void supervise(id, () => keeper.start());
+for (const h of histories) void supervise(`history:${h.chain}`, () => h.start());
 
 /**
  * The slow pass.
@@ -216,7 +259,7 @@ for (const sui of cfg.sui) {
         store.incident('sui', (err as Error).message);
         console.log(`[sui] ${(err as Error).message}`);
       }
-      await sleep(cfg.swapsMs);
+      await sleep(cfg.pollMs);
     }
   })();
 }
@@ -232,22 +275,7 @@ for (const near of cfg.near) {
         store.incident('near', (err as Error).message);
         console.log(`[near] ${(err as Error).message}`);
       }
-      await sleep(cfg.swapsMs);
-    }
-  })();
-}
-
-if (swapChains(cfg).length) {
-  void (async function swapsLoop() {
-    while (!stopping) {
-      try {
-        const n = await followSwaps(cfg, store);
-        if (n) console.log(`[swaps] ${n} new bridgeroute action(s)`);
-      } catch (err) {
-        store.incident('swaps', (err as Error).message);
-        console.log(`[swaps] ${(err as Error).message}`);
-      }
-      await sleep(cfg.swapsMs);
+      await sleep(cfg.pollMs);
     }
   })();
 }
@@ -259,6 +287,7 @@ const shutdown = (signal: string) => {
   savanna.stop();
   for (const follower of evms) follower.stop();
   for (const keeper of keepers.values()) keeper.stop();
+  for (const h of histories) h.stop();
   api.close();
   // The followers write their frontier on the way out; give them a moment, then
   // leave regardless rather than hang a container restart.

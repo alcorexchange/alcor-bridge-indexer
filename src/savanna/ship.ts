@@ -77,6 +77,8 @@ export type ShipBlock = {
   finality_data?: FinalityData;
   /** Raw `transaction_trace[]`, left packed. Decoding needs the socket's ABI. */
   traces?: Uint8Array;
+  /** The packed `signed_block`, when asked for: its header is where the block's time is. */
+  block?: Uint8Array;
 };
 
 export type ShipStream = {
@@ -158,7 +160,7 @@ export function decodeBlocksResult(data: Uint8Array): ShipBlock | undefined {
   const last_irreversible = r.position();
   const this_block = r.optional(() => r.position());
   r.optional(() => r.position()); // prev_block
-  r.optionalBytes(); // block
+  const block = r.optionalBytes();
   const traces = r.optionalBytes();
   r.optionalBytes(); // deltas
   const fd = r.optionalBytes();
@@ -169,7 +171,19 @@ export function decodeBlocksResult(data: Uint8Array): ShipBlock | undefined {
     this_block,
     finality_data: fd ? decodeFinalityData(fd) : undefined,
     traces,
+    block,
   };
+}
+
+/** 2000-01-01T00:00:00Z, where a `block_timestamp_type` counts half-seconds from. */
+const BLOCK_EPOCH_SECONDS = 946_684_800;
+
+/**
+ * Unix seconds of a block, from its packed `signed_block`: the header's first
+ * field is the slot, half-seconds since 2000. Traces carry no time of their own.
+ */
+export function blockTime(block: Uint8Array): number {
+  return BLOCK_EPOCH_SECONDS + Math.floor(Buffer.from(block).readUInt32LE(0) / 2);
 }
 
 export function encodeAck(n: number): Buffer {
@@ -182,16 +196,17 @@ export function encodeAck(n: number): Buffer {
 /**
  * `irreversibleOnly` makes the node hold every block back until it is final, so
  * a follower that only appends never sees a fork. `finalityData` is off for a
- * legacy chain such as WAX, which has none to send.
+ * legacy chain such as WAX, which has none to send. `fetchBlock` sends the block
+ * itself, for its time.
  */
-export type RequestOptions = { irreversibleOnly?: boolean; finalityData?: boolean };
+export type RequestOptions = { irreversibleOnly?: boolean; finalityData?: boolean; fetchBlock?: boolean };
 
 export function encodeRequest(
   start: number,
   end: number,
   withTraces: boolean,
   inFlight = MESSAGES_IN_FLIGHT,
-  { irreversibleOnly = false, finalityData = true }: RequestOptions = {},
+  { irreversibleOnly = false, finalityData = true, fetchBlock = false }: RequestOptions = {},
 ): Buffer {
   const u32 = (v: number) => {
     const b = Buffer.alloc(4);
@@ -205,7 +220,7 @@ export function encodeRequest(
     u32(inFlight),
     Buffer.from([0]), // have_positions
     Buffer.from([irreversibleOnly ? 1 : 0]), // irreversible_only
-    Buffer.from([0]), // fetch_block
+    Buffer.from([fetchBlock ? 1 : 0]), // fetch_block
     Buffer.from([withTraces ? 1 : 0]), // fetch_traces
     Buffer.from([0]), // fetch_deltas
     Buffer.from([finalityData ? 1 : 0]), // fetch_finality_data

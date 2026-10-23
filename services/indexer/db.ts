@@ -14,6 +14,7 @@
  *   handovers   the certificate that carries each policy rotation to an EVM light client
  *   hops        which withdrawal carries a deposit on through `bridgehop`, and where it goes back
  *   swaps       the orders `bridgeroute` made of payouts, and how each ended
+ *   actions     the few actions of our contracts the indexer reads, our own history of each chain
  *
  * Only `proofs` and `handovers` are irreplaceable. Everything else can be rebuilt by rescanning
  * the two chains, and the indexer does exactly that on every restart.
@@ -159,6 +160,22 @@ export type SwapRow = {
   closed_tx: string | null;
   opened_at: number;
   closed_at: number | null;
+};
+
+/** An action of a contract the indexer reads, as the state-history stream handed it over. */
+export type ChainAction = {
+  /** The chain's registry id: `telos`, `wax`. */
+  chain: string;
+  /** Its global sequence, as text: unique on the chain. */
+  seq: string;
+  account: string;
+  name: string;
+  block_num: number;
+  trx_id: string;
+  /** The block's time, unix seconds. */
+  time: number;
+  /** Decoded by the contract's ABI as of that block. */
+  data: Record<string, any>;
 };
 
 /** One group of `Store.volume`: `amount` is a sum in canonical units, as text. */
@@ -419,7 +436,7 @@ export class Store {
       CREATE INDEX IF NOT EXISTS hops_to      ON hops (to_recipient);
       CREATE INDEX IF NOT EXISTS hops_back    ON hops (back_recipient);
 
-      -- Orders of bridgeroute, read from its opened and closed actions in Hyperion.
+      -- Orders of bridgeroute, read from its opened and closed actions in the stream.
       -- The contract erases a row when the order ends, so this is the only place
       -- that says how a swap at the far end of a crossing came out.
       CREATE TABLE IF NOT EXISTS swaps (
@@ -439,6 +456,24 @@ export class Store {
         PRIMARY KEY (chain, id)
       );
       CREATE INDEX IF NOT EXISTS swaps_payout ON swaps (payout_tx);
+
+      -- Our own history of the Antelope chains: the few actions the indexer
+      -- reads, kept as the state-history stream hands them over (actions.ts).
+      -- seq is the action's global sequence, unique on its chain, so a block
+      -- read twice is stored once. data is the action decoded by the ABI the
+      -- contract had in that block, as JSON.
+      CREATE TABLE IF NOT EXISTS actions (
+        chain     TEXT    NOT NULL,
+        seq       TEXT    NOT NULL,
+        account   TEXT    NOT NULL,
+        name      TEXT    NOT NULL,
+        block_num INTEGER NOT NULL,
+        trx_id    TEXT    NOT NULL,
+        time      INTEGER NOT NULL,
+        data      TEXT    NOT NULL,
+        PRIMARY KEY (chain, seq)
+      );
+      CREATE INDEX IF NOT EXISTS actions_by_name ON actions (chain, name, time);
 
       -- Anything an operator would want to find afterwards: a stream gap, a
       -- freeze that failed, a reconnect. Small and capped.
@@ -755,21 +790,28 @@ export class Store {
     return this.db.prepare('SELECT * FROM swaps WHERE chain = ? AND id = ?').get(chain, id) as SwapRow | undefined;
   }
 
-  /**
-   * When the oldest order on `chain` was opened whose `opened` was stored from
-   * fields it does not have — `undefined` written as text: a Hyperion host's
-   * stale ABI, before hosts were checked. Undefined when there is none.
-   */
-  oldestMalformedSwap(chain: string): number | undefined {
-    const r = this.db
-      .prepare(`SELECT MIN(opened_at) AS at FROM swaps WHERE chain = ? AND (recipient = 'undefined' OR back = 'undefined')`)
-      .get(chain) as { at: number | null };
-    return r.at ?? undefined;
-  }
-
   /** The order a payout made, by the payout's transaction. */
   swapByPayout(tx: string): SwapRow | undefined {
     return this.db.prepare('SELECT * FROM swaps WHERE payout_tx = ?').get(tx) as SwapRow | undefined;
+  }
+
+  // --- actions ------------------------------------------------------------------
+
+  /** Actions from the stream; one already stored is left as it is. */
+  putActions(actions: ChainAction[]): void {
+    const insert = this.db.prepare(
+      `INSERT INTO actions (chain, seq, account, name, block_num, trx_id, time, data) VALUES (?,?,?,?,?,?,?,?)
+       ON CONFLICT(chain, seq) DO NOTHING`,
+    );
+    for (const a of actions) insert.run(a.chain, a.seq, a.account, a.name, a.block_num, a.trx_id, a.time, JSON.stringify(a.data));
+  }
+
+  /** `chain`'s actions called `name` from `after` (unix seconds) on, oldest first. */
+  actionsOf(chain: string, name: string, after: number): ChainAction[] {
+    const rows = this.db
+      .prepare('SELECT * FROM actions WHERE chain = ? AND name = ? AND time >= ? ORDER BY block_num, CAST(seq AS INTEGER)')
+      .all(chain, name, after) as (Omit<ChainAction, 'data'> & { data: string })[];
+    return rows.map((r) => ({ ...r, data: JSON.parse(r.data) }));
   }
 
   // --- hops ---------------------------------------------------------------------

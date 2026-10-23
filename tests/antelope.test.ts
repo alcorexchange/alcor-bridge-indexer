@@ -36,24 +36,26 @@ test('a legacy chain is turned on by its state-history socket, Vaulta by its RPC
   assert.deepEqual(ANTELOPE_CHAINS.map(enabledBy), ['WAX_SHIP_URL', 'XPR_SHIP_URL', 'VAULTA_RPC']);
 
   assert.deepEqual(antelopeChains({}, 'data'), []);
-  // The relayers' socket for Vaulta does not make the indexer read it.
+  // The socket alone does not make the indexer read Vaulta.
   assert.deepEqual(antelopeChains({ VAULTA_SHIP_URL: 'ws://127.0.0.1:1113' }, 'data'), []);
+  // But a chain the indexer reads needs its socket, for its own history of it.
+  assert.throws(() => antelopeChains({ VAULTA_RPC: 'http://127.0.0.1:1111' }, 'data'), /set VAULTA_SHIP_URL/);
 
-  const [vaulta] = antelopeChains({ VAULTA_RPC: 'http://127.0.0.1:1111' }, 'data');
+  const [vaulta] = antelopeChains({ VAULTA_RPC: 'http://127.0.0.1:1111', VAULTA_SHIP_URL: 'ws://127.0.0.1:1113' }, 'data');
   assert.equal(vaulta.chain.id, 'vaulta');
   assert.equal(vaulta.rpc, 'http://127.0.0.1:1111');
-  assert.deepEqual(vaulta.history, ['https://eos.eosusa.io', 'https://eos.hyperion.eosrio.io']);
+  assert.equal(vaulta.ship, 'ws://127.0.0.1:1113');
   assert.equal(vaulta.keeper, undefined);
 
-  const both = antelopeChains({ WAX_SHIP_URL: 'ws://127.0.0.1:2224', VAULTA_RPC: 'http://n:1111', VAULTA_HISTORY: 'https://a, https://b' }, '/data');
+  const both = antelopeChains({ WAX_SHIP_URL: 'ws://127.0.0.1:2224', VAULTA_RPC: 'http://n:1111', VAULTA_SHIP_URL: 'ws://n:1113' }, '/data');
   assert.deepEqual(both.map((a) => a.chain.id), ['wax', 'vaulta']);
   assert.equal(both[0].rpc, 'https://wax.eosusa.io');
+  assert.equal(both[0].ship, 'ws://127.0.0.1:2224');
   assert.deepEqual(both[0].keeper && { ship: both[0].keeper.ship, dir: both[0].keeper.dir, seed: both[0].keeper.seedFile }, {
     ship: 'ws://127.0.0.1:2224',
     dir: '/data/wax',
     seed: 'data/wax-blockroot-seed.json',
   });
-  assert.deepEqual(both[1].history, ['https://a', 'https://b']);
 });
 
 test('Vaulta\'s timings are seconds both ways, and say they are not measured yet', () => {
@@ -177,7 +179,7 @@ const cfg = {
   savanna: { id: 'telos-production', rpc: ['http://telos.test'], accounts: { bridge: 'bridge.alcor' } },
   accounts: { bridge: 'bridge.alcor' },
   sources: [],
-  antelope: antelopeChains({ WAX_SHIP_URL: 'ws://unused', WAX_RPC: 'http://wax.test', VAULTA_RPC: 'http://vaulta.test' }, 'data'),
+  antelope: antelopeChains({ WAX_SHIP_URL: 'ws://unused', WAX_RPC: 'http://wax.test', VAULTA_RPC: 'http://vaulta.test', VAULTA_SHIP_URL: 'ws://unused' }, 'data'),
 } as unknown as IndexerConfig;
 
 test('/v1/chains lists Vaulta with its finalizer policies, and WAX as before', async () => {

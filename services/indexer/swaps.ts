@@ -14,48 +14,18 @@
  * the key that joins the crossing to its order, and nothing on chain needs to
  * name the crossing.
  *
- * The contract erases an order when it ends; Hyperion keeps both actions, so
- * they are read from there, a page at a time, behind a cursor per chain.
+ * The contract erases an order when it ends, so both actions are read out of
+ * each chain's state-history stream as they happen (actions.ts) and applied
+ * here.
  *
- * An action is stored only in the shape the contract declares. A Hyperion host
- * with a stale ABI once served `opened` with other fields; it is passed over,
- * and a row it wrote is read again.
+ * An action is stored only in the shape the contract declares.
  */
 
-import { ANTELOPE_SWAPS, ROUTE_MEMO } from '../../src/chains/swaps.ts';
-import { SETTLEMENT_CHAIN, type IndexerConfig } from './config.ts';
-import type { Store, SwapPayment, SwapRow } from './db.ts';
-import { hyperionActions, type HistoryAction } from './history.ts';
+import { ANTELOPE_SWAPS } from '../../src/chains/swaps.ts';
+import type { ChainAction, Store, SwapPayment, SwapRow } from './db.ts';
 
-/** Re-read this much before each cursor: Hyperion indexes a block a little after it is produced. */
-const OVERLAP_SECONDS = 120;
-/**
- * Where a chain with no cursor yet starts: as far back as an order can still be
- * open. Not the epoch — Hyperion refuses an ascending query from more than 90
- * days ago — and nothing older could change how a crossing reads now.
- */
-const FIRST_LOOK_SECONDS = ROUTE_MEMO.maxWait;
-/**
- * How far back a quiet chain keeps looking: the cursor follows the newest
- * action seen, and with none it still moves up to an hour behind the clock —
- * far more than Hyperion takes to index a block, and never toward its limit.
- */
-const QUIET_LOOK_SECONDS = 3600;
-
-/** A chain where bridgeroute is deployed, and the Hyperion endpoints its history is read through. */
-type SwapChain = { chain: string; account: string; history: string[] };
-
-/** Telos and every Antelope chain this instance follows, where bridgeroute has an account. */
-export function swapChains(cfg: IndexerConfig): SwapChain[] {
-  const out: SwapChain[] = [];
-  const telos = ANTELOPE_SWAPS[SETTLEMENT_CHAIN]?.route;
-  if (telos) out.push({ chain: SETTLEMENT_CHAIN, account: telos, history: cfg.history });
-  for (const a of cfg.antelope) {
-    const route = ANTELOPE_SWAPS[a.chain.id]?.route;
-    if (route) out.push({ chain: a.chain.id, account: route, history: a.history });
-  }
-  return out;
-}
+/** bridgeroute's account on `chain`, if it is deployed there. */
+export const routeOf = (chain: string): string | undefined => ANTELOPE_SWAPS[chain]?.route;
 
 type ExtendedAsset = { quantity: string; contract: string };
 
@@ -77,14 +47,14 @@ export const wellFormedClosed = (d: Record<string, any>): boolean =>
 const seconds = (time: string): number => Math.floor(Date.parse(/Z$|[+-]\d\d:\d\d$/.test(time) ? time : `${time}Z`) / 1000);
 
 /**
- * Record `opened` and `closed` actions of `chain`'s bridgeroute; opened first,
- * so a payout's own transaction wins. Returns how many were new: every read
- * overlaps the last, and the same actions come back each time.
+ * Record `chain`'s bridgeroute `opened` and `closed` actions; opened first, so a
+ * payout's own transaction wins. Returns how many changed a row: a block read
+ * twice brings the same actions back.
  */
-export function applySwapActions(store: Store, chain: string, opened: HistoryAction[], closed: HistoryAction[]): number {
+export function applySwapActions(store: Store, chain: string, actions: ChainAction[]): number {
   let fresh = 0;
-  for (const a of opened) {
-    const d = a.act.data;
+  for (const a of actions.filter((x) => x.name === 'opened')) {
+    const d = a.data;
     if (!wellFormedOpened(d)) continue;
     const row = {
       chain,
@@ -95,17 +65,14 @@ export function applySwapActions(store: Store, chain: string, opened: HistoryAct
       input: written(d.in),
       least: written(d.least),
       deadline: seconds(d.deadline),
-      opened_at: seconds(a.timestamp),
+      opened_at: a.time,
     };
-    // Written again when what is stored differs: a row from a stale-ABI host is corrected.
-    const stored = store.swapOf(chain, row.id);
-    if (stored && stored.payout_tx === row.payout_tx && stored.recipient === row.recipient && stored.back === row.back &&
-        stored.input === row.input && stored.least === row.least && stored.deadline === row.deadline) continue;
+    if (store.swapOf(chain, row.id)?.payout_tx === row.payout_tx) continue;
     fresh++;
     store.putSwapOpened(row);
   }
-  for (const a of closed) {
-    const d = a.act.data;
+  for (const a of actions.filter((x) => x.name === 'closed')) {
+    const d = a.data;
     if (!wellFormedClosed(d)) continue;
     if (store.swapOf(chain, Number(d.id))?.outcome) continue;
     fresh++;
@@ -115,45 +82,10 @@ export function applySwapActions(store: Store, chain: string, opened: HistoryAct
       outcome: d.outcome,
       paid: (d.paid as { to: string; tokens: ExtendedAsset }[]).map((p) => ({ to: p.to, asset: written(p.tokens) })),
       tx: a.trx_id,
-      at: seconds(a.timestamp),
+      at: a.time,
     });
   }
   return fresh;
-}
-
-/**
- * Read every chain's new `opened` and `closed`; how many actions were recorded.
- * One chain's Hyperion failing leaves the others read, and is reported after them.
- */
-export async function followSwaps(cfg: IndexerConfig, store: Store): Promise<number> {
-  let recorded = 0;
-  const failures: string[] = [];
-  for (const c of swapChains(cfg)) {
-    try {
-      recorded += await followChain(store, c);
-    } catch (err) {
-      failures.push(`${c.chain}: ${(err as Error).message}`);
-    }
-  }
-  if (failures.length) throw new Error(failures.join('; '));
-  return recorded;
-}
-
-async function followChain(store: Store, c: SwapChain): Promise<number> {
-  const key = `swaps:${c.chain}`;
-  const now = Math.floor(Date.now() / 1000);
-  const cursor = store.getNumber(key) ?? now - FIRST_LOOK_SECONDS;
-  // A row a stale-ABI host wrote (before hosts were checked) is read again from its own time.
-  const broken = store.oldestMalformedSwap(c.chain);
-  const after = Math.min(cursor - OVERLAP_SECONDS, broken === undefined ? Infinity : broken - OVERLAP_SECONDS);
-  const [opened, closed] = await Promise.all([
-    hyperionActions(c.history, c.account, 'opened', after, wellFormedOpened),
-    hyperionActions(c.history, c.account, 'closed', after, wellFormedClosed),
-  ]);
-  const recorded = applySwapActions(store, c.chain, opened, closed);
-  const newest = Math.max(cursor, now - QUIET_LOOK_SECONDS, ...[...opened, ...closed].map((a) => seconds(a.timestamp)));
-  store.setMeta(key, String(newest));
-  return recorded;
 }
 
 /**

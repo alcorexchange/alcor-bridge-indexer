@@ -66,8 +66,8 @@ export type AntelopeConfig = {
   chain: AntelopeChain;
   /** The chain's HTTP API, for the vault's own tables (what it settled) and the status page. */
   rpc: string;
-  /** Hyperion, for the vault's past actions when a row is missing the chain's half. */
-  history: string[];
+  /** Its state-history socket: our own history of its vault and bridgeroute (actions.ts). */
+  ship: string;
   /** Its blockroot keeper: a legacy chain only, since a Savanna one signs over nothing a keeper holds. */
   keeper?: KeeperConfig;
 };
@@ -202,8 +202,8 @@ export type IndexerConfig = {
   relayerDir?: string;
   /** How often those files are read: a stat and a short read, so every 200 ms. */
   crossingsMs: number;
-  /** Between reads of bridgeroute's history on each chain it is deployed on. */
-  swapsMs: number;
+  /** Between reads of the Sui and NEAR vaults' events. */
+  pollMs: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): IndexerConfig {
@@ -257,7 +257,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IndexerConfig 
     // An idle look is a stat of a few local files, and a deposit is in its file
     // the moment the relayer sees its block: the poll is the only wait left.
     crossingsMs: num(env.CROSSINGS_MS, 200),
-    swapsMs: num(env.SWAPS_MS, 10_000),
+    pollMs: num(env.POLL_MS, 10_000),
     antelope: antelopeChains(env, dataDir),
     sui: suiChains(env),
     near: nearChains(env),
@@ -285,15 +285,18 @@ export function antelopeChains(env: NodeJS.ProcessEnv, dataDir: string): Antelop
 }
 
 function antelopeConfig(c: AntelopeChain, env: NodeJS.ProcessEnv, dataDir: string): AntelopeConfig {
-  const history = (env[`${c.env}_HISTORY`]?.split(',') ?? c.defaults.history).map((s) => s.trim()).filter(Boolean);
-  if (c.consensus === 'savanna') return { chain: c, rpc: env[`${c.env}_RPC`]!, history };
+  const ship = env[`${c.env}_SHIP_URL`];
+  if (!ship) {
+    throw new Error(`${c.name} is on (${enabledBy(c)}) but has no state-history socket: set ${c.env}_SHIP_URL`);
+  }
+  if (c.consensus === 'savanna') return { chain: c, rpc: env[`${c.env}_RPC`]!, ship };
   return {
     chain: c,
     rpc: env[`${c.env}_RPC`] ?? c.defaults.rpc,
-    history,
+    ship,
     keeper: {
       chain: c,
-      ship: env[`${c.env}_SHIP_URL`]!,
+      ship,
       seedFile: env[`${c.env}_BLOCKROOT_SEED`] ?? c.defaults.seedFile,
       dir: env[`${c.env}_DIR`] ?? `${dataDir}/${c.id}`,
       checkpointEvery: num(env[`${c.env}_CHECKPOINT_EVERY`], 10_000),

@@ -42,6 +42,7 @@ import { TOPICS } from './evm.ts';
 import type { SettlementFollower } from './savanna.ts';
 import type { EvmFollower } from './evm.ts';
 import type { BlockrootKeeper } from './blockroot.ts';
+import type { ActionFollower } from './actions.ts';
 import { rebranch, treeThrough } from './tree.ts';
 import { assetFor, buildFast, confirmationsLeft, fastVerdict, routeFor, routeLimits, routeRoom, warmListings, FastUnavailable } from './fast.ts';
 import { holdOf, isLarge, type HoldContext, type Outflow } from './holds.ts';
@@ -132,6 +133,8 @@ export type Deps = {
   evms: EvmFollower[];
   /** A blockroot keeper per legacy chain this instance follows, by chain id. */
   keepers: Map<string, BlockrootKeeper>;
+  /** Our own history of each Antelope chain, Telos first (actions.ts). */
+  histories: ActionFollower[];
   startedAt: number;
 };
 
@@ -433,6 +436,8 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
 
 /** A deposit held this long is an incident rather than a hiccup. */
 const HELD_ALARM_SECONDS = 3600;
+/** Ten minutes of half-second blocks: a history this far behind its chain's last irreversible block is an alarm. */
+const HISTORY_BEHIND_BLOCKS = 1200;
 
 /** How far back a large withdrawal stays on `/health`. */
 const LARGE_WINDOW_SECONDS = 86_400;
@@ -533,6 +538,18 @@ async function health(deps: Deps) {
       `${f.id} has not advanced in ${Math.round(stuckFor / 60)} min at block ${f.state.at}, ` +
         `${f.state.head - f.state.at} behind the head` +
         (f.state.lastError ? ` — ${f.state.lastError}` : ''),
+    );
+  }
+
+  // Our own history of a chain, stopped or behind: swaps there show nothing new,
+  // and a gap past the node's retention is filled by hand. Irreversible blocks
+  // only, so a few minutes behind the head is normal on WAX and XPR.
+  for (const h of deps.histories) {
+    const stuckFor = now - h.state.atMovedAt;
+    if (stuckFor < stallSeconds && h.state.lib - h.state.at < HISTORY_BEHIND_BLOCKS) continue;
+    alarms.push(
+      `history of ${h.chain} is at block ${h.state.at}, ${h.state.lib - h.state.at} behind its last irreversible, ` +
+        `not advanced in ${Math.round(stuckFor / 60)} min` + (h.state.lastError ? ` — ${h.state.lastError}` : ''),
     );
   }
 
@@ -651,6 +668,13 @@ async function health(deps: Deps) {
       seenThisRun: { deposits: f.state.deposits, frozen: f.state.frozen, headRaces: f.state.headRaces },
       wiring: f.state.wiring.length ? f.state.wiring : 'as configured',
       lastError: f.state.lastError,
+    })),
+    histories: deps.histories.map((h) => ({
+      chain: h.chain,
+      at: h.state.at,
+      lib: h.state.lib,
+      behind: h.state.lib - h.state.at,
+      lastError: h.state.lastError,
     })),
     // From storage, not from this run's counters. A restart resumes from the
     // saved scan position and sees nothing again, and a health page that then

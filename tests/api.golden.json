@@ -2111,6 +2111,7 @@
      "lastError": null
     }
    ],
+   "histories": [],
    "trustedRoots": 2,
    "committee": {
     "error": "tls.lc.alcor holds no committee at all — bootstrap first"

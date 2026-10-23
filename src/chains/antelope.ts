@@ -15,9 +15,9 @@
  *
  * Each chain's settings are read from the environment under its prefix:
  * `<PREFIX>_SHIP_URL` turns a legacy chain on (its keeper streams it),
- * `<PREFIX>_RPC` a Savanna one (the indexer only reads its tables). Beside
- * that, `<PREFIX>_RPC`, `<PREFIX>_HISTORY`, and for a legacy chain
- * `<PREFIX>_BLOCKROOT_SEED` and `<PREFIX>_DIR`, override the defaults.
+ * `<PREFIX>_RPC` a Savanna one. Either way the indexer needs both: the socket
+ * is where its own history of the chain comes from. For a legacy chain
+ * `<PREFIX>_RPC`, `<PREFIX>_BLOCKROOT_SEED` and `<PREFIX>_DIR` override the defaults.
  */
 /** A duration that is not one number, because none of these are. Seconds. */
 import { hexToName } from '../proof/pack.ts';
@@ -40,15 +40,18 @@ type Common = {
 
 export type LegacyChain = Common & {
   consensus: 'legacy';
-  defaults: { rpc: string; history: string[]; seedFile: string };
+  defaults: { rpc: string; seedFile: string };
   /** How long its producers take to build two rounds of 2/3+1 on a block. */
   confirm: Span;
 };
 
 export type SavannaSource = Common & {
   consensus: 'savanna';
-  /** No RPC default: giving one is what turns the chain on. */
-  defaults: { history: string[] };
+  /**
+   * A public endpoint, for a reader that does not run the chain (the courier).
+   * Not the indexer's default: giving `<PREFIX>_RPC` is what turns the chain on there.
+   */
+  defaults: { rpc: string };
   /** Deposits: its finalizers certifying the block, then the relayer proving it on Telos. */
   deposit: { certify: Span; prove: Span };
   /** Withdrawals: Telos finalizing the burn, then the relayer releasing it here. */
@@ -71,7 +74,7 @@ export const ANTELOPE_CHAINS: readonly AntelopeChain[] = [
     chainId: '1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4',
     env: 'WAX',
     consensus: 'legacy',
-    defaults: { rpc: 'https://wax.eosusa.io', history: ['https://wax.eosusa.io'], seedFile: 'data/wax-blockroot-seed.json' },
+    defaults: { rpc: 'https://wax.eosusa.io', seedFile: 'data/wax-blockroot-seed.json' },
     // 8 producers, 6 needed per round; measured on mainnet 2026-09-30.
     confirm: { min: 36, typical: 42, max: 72 },
   }),
@@ -81,7 +84,7 @@ export const ANTELOPE_CHAINS: readonly AntelopeChain[] = [
     chainId: '384da888112027f0321850a169f737c33e53b388aad48b5adace4bab97f437e0',
     env: 'XPR',
     consensus: 'legacy',
-    defaults: { rpc: 'https://proton.eosusa.io', history: ['https://proton.eosusa.io'], seedFile: 'data/xpr-blockroot-seed.json' },
+    defaults: { rpc: 'https://proton.eosusa.io', seedFile: 'data/xpr-blockroot-seed.json' },
     // 21 producers, 15 needed per round, six seconds each: fourteen turns a round.
     confirm: { min: 160, typical: 170, max: 230 },
   }),
@@ -91,8 +94,7 @@ export const ANTELOPE_CHAINS: readonly AntelopeChain[] = [
     chainId: 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906',
     env: 'VAULTA',
     consensus: 'savanna',
-    // Both answered /v2/history/get_actions on 2026-10-12, eosusa in under a second.
-    defaults: { history: ['https://eos.eosusa.io', 'https://eos.hyperion.eosrio.io'] },
+    defaults: { rpc: 'https://eos.eosusa.io' },
     // An estimate pending a production measurement. Savanna finalizes in a
     // second or two on both chains; the rest is the relayers: vaulta-in proves
     // a log once its stream holds a root covering it, vaulta-out streams

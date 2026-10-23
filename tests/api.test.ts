@@ -268,6 +268,7 @@ test('the API answers exactly as the golden file says', async () => {
     },
     evms: [follower('mainnet', 1005), follower('bsc', 50_000_000), follower('polygon', 70_000_000, 69_999_500)],
     keepers: new Map(),
+    histories: [],
     startedAt: NOW * 1000,
   } as unknown as Deps;
 
@@ -305,7 +306,7 @@ test('a voided hop bridgeroute opened is served for recover, though no deposit s
   for (const id of [21, 30, 31]) {
     store.upsertTransfer({ key: withdrawalKey(id), direction: 'withdrawal', ref: id, status: 'refunded', src_block: 400, src_time: 4000 });
   }
-  const server = createApi({ cfg, store, keepers: new Map(), startedAt: NOW * 1000 } as unknown as Deps);
+  const server = createApi({ cfg, store, keepers: new Map(), histories: [], startedAt: NOW * 1000 } as unknown as Deps);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   try {
     const port = (server.address() as AddressInfo).port;

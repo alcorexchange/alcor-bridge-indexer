@@ -1,13 +1,13 @@
 /**
- * Filling in what a row is missing, from the chains' action history.
+ * Filling in what a row is missing, from our own action history (actions.ts).
  *
- * The stream and the crossings file are how a row is normally completed, and
- * both only know what went by while they were watched. A crossing made before
- * either existed — or while the process was down — comes out of the tables
- * with a status and an amount and nothing to show a person: no token, no
- * transaction on either side. Hyperion has kept the actions, so a row that
- * lacks something is completed from there, once, and then never asked about
- * again because it lacks nothing.
+ * The settlement stream and the relayers' crossings files are how a row is
+ * normally completed. What they miss — a relayer that did not record a step,
+ * a credit the stream could not decode — comes out of the tables with a status
+ * and an amount and nothing to show a person: no token, no transaction on
+ * either side. Each chain's history has kept the actions, so a row that lacks
+ * something is completed from there, once, and then never looked at again
+ * because it lacks nothing.
  *
  *   credit   on Telos: the token, the beneficiary, the transaction that credited
  *   wdlog    on Telos: the transaction that burned a withdrawal
@@ -19,64 +19,12 @@
  * left to the stream, which is faster than a history query by a minute.
  */
 
-import { fetchJson } from '../../src/net/fetchJson.ts';
 import { execFor } from '../../src/evm/exec.ts';
-import { getTableRows } from '../../src/net/antelope.ts';
-import { antelopeVaults } from '../../src/chains/antelope.ts';
-import { chainOfDomain, type IndexerConfig } from './config.ts';
-import { BOOKED, Store, depositKey, externalToken, type TransferRow } from './db.ts';
+import { chainOfDomain, SETTLEMENT_CHAIN, type IndexerConfig } from './config.ts';
+import { BOOKED, Store, depositKey, externalToken, type ChainAction, type TransferRow } from './db.ts';
 
-const PAGE = 100;
 /** How far before the row's own time the action is searched for. */
 const SLACK_SECONDS = 24 * 3600;
-
-export type HistoryAction = {
-  block_num: number;
-  trx_id: string;
-  timestamp: string;
-  act: { name: string; data: Record<string, any> };
-};
-
-/**
- * Every `account::action` after `after`, from the first Hyperion host that
- * answers — and answers in the shape `wellFormed` expects. A host decodes an
- * action with the ABI it has cached for the contract, and one that missed a
- * `setabi` serves the old fields over the new bytes: plausible-looking garbage
- * (route.alcor's `opened` on mainnet.telos.net, 2026-10-20). Such a host is
- * passed over like one that is down.
- */
-export async function hyperionActions(
-  hosts: string[],
-  account: string,
-  action: string,
-  afterSeconds: number,
-  wellFormed: (data: Record<string, any>) => boolean = () => true,
-): Promise<HistoryAction[]> {
-  if (!hosts.length) throw new Error('no Hyperion endpoint configured');
-  const after = new Date(afterSeconds * 1000).toISOString();
-  const failures: string[] = [];
-  for (const host of hosts) {
-    try {
-      const out: HistoryAction[] = [];
-      for (let skip = 0; ; skip += PAGE) {
-        const url =
-          `${host.replace(/\/$/, '')}/v2/history/get_actions?account=${account}` +
-          `&filter=${account}:${action}&after=${after}&sort=asc&limit=${PAGE}&skip=${skip}`;
-        const body = (await fetchJson(url)) as { actions?: HistoryAction[] };
-        if (!Array.isArray(body.actions)) throw new Error('no actions array');
-        const odd = body.actions.find((a) => !wellFormed(a.act?.data ?? {}));
-        if (odd) throw new Error(`decodes ${action} in ${odd.trx_id} with another ABI: ${JSON.stringify(odd.act?.data).slice(0, 120)}`);
-        out.push(...body.actions);
-        if (body.actions.length < PAGE) return out;
-      }
-    } catch (err) {
-      failures.push(`${host}: ${(err as Error).message}`);
-    }
-  }
-  throw new Error(`no Hyperion endpoint served ${account}::${action} — ${failures.join('; ')}`);
-}
-
-const seconds = (timestamp: string) => Math.floor(Date.parse(`${timestamp}Z`) / 1000);
 
 /** Booked deposits with no token or no crediting transaction. */
 function depositsMissingCredit(store: Store): TransferRow[] {
@@ -106,8 +54,8 @@ function antelopeRowsMissing(cfg: IndexerConfig, store: Store, direction: 'depos
 }
 
 /** The ledger's `wdlog`, which rode in the transaction that burned the withdrawal. */
-export function applyBurns(store: Store, rows: TransferRow[], wdlogs: HistoryAction[]): number {
-  const byId = new Map(wdlogs.map((a) => [Number(a.act.data.id), a]));
+export function applyBurns(store: Store, rows: TransferRow[], wdlogs: ChainAction[]): number {
+  const byId = new Map(wdlogs.map((a) => [Number(a.data.id), a]));
   let filled = 0;
   for (const row of rows) {
     const a = byId.get(row.ref);
@@ -119,7 +67,7 @@ export function applyBurns(store: Store, rows: TransferRow[], wdlogs: HistoryAct
       status: row.status,
       src_tx: a.trx_id,
       src_block: a.block_num,
-      src_time: seconds(a.timestamp),
+      src_time: a.time,
     });
     filled++;
   }
@@ -127,13 +75,13 @@ export function applyBurns(store: Store, rows: TransferRow[], wdlogs: HistoryAct
 }
 
 /** What the ledger's `credit` says about a deposit, applied to its row. */
-export function applyCredits(store: Store, rows: TransferRow[], credits: HistoryAction[]): number {
-  const byKey = new Map(credits.map((a) => [depositKey(String(a.act.data.domain), Number(a.act.data.nonce)), a]));
+export function applyCredits(store: Store, rows: TransferRow[], credits: ChainAction[]): number {
+  const byKey = new Map(credits.map((a) => [depositKey(String(a.data.domain), Number(a.data.nonce)), a]));
   let filled = 0;
   for (const row of rows) {
     const a = byKey.get(row.key);
     if (!a) continue;
-    const d = a.act.data;
+    const d = a.data;
     store.upsertTransfer({
       key: row.key,
       direction: 'deposit',
@@ -145,7 +93,7 @@ export function applyCredits(store: Store, rows: TransferRow[], credits: History
       memo: d.memo ? String(d.memo) : undefined,
       dst_tx: a.trx_id,
       dst_block: a.block_num,
-      dst_time: seconds(a.timestamp),
+      dst_time: a.time,
     });
     filled++;
   }
@@ -153,13 +101,13 @@ export function applyCredits(store: Store, rows: TransferRow[], credits: History
 }
 
 /** What an Antelope vault's `deplog` says about a deposit: where it started. */
-export function applyDeplogs(store: Store, domain: string, rows: TransferRow[], deplogs: HistoryAction[]): number {
-  const byNonce = new Map(deplogs.map((a) => [Number(a.act.data.nonce), a]));
+export function applyDeplogs(store: Store, domain: string, rows: TransferRow[], deplogs: ChainAction[]): number {
+  const byNonce = new Map(deplogs.map((a) => [Number(a.data.nonce), a]));
   let filled = 0;
   for (const row of rows) {
     const a = byNonce.get(row.ref);
     if (!a || row.domain !== domain) continue;
-    const d = a.act.data;
+    const d = a.data;
     store.upsertTransfer({
       key: row.key,
       direction: 'deposit',
@@ -169,7 +117,7 @@ export function applyDeplogs(store: Store, domain: string, rows: TransferRow[], 
       memo: d.memo ? String(d.memo) : undefined,
       src_tx: a.trx_id,
       src_block: a.block_num,
-      src_time: seconds(a.timestamp),
+      src_time: a.time,
     });
     filled++;
   }
@@ -180,10 +128,10 @@ export function applyDeplogs(store: Store, domain: string, rows: TransferRow[], 
  * An Antelope vault's `release` and `expire` carry the withdrawal's packed payload
  * in `data`; its id is the first eight bytes.
  */
-export function applySettlements(store: Store, domain: string, rows: TransferRow[], actions: HistoryAction[]): number {
-  const byId = new Map<number, HistoryAction>();
+export function applySettlements(store: Store, domain: string, rows: TransferRow[], actions: ChainAction[]): number {
+  const byId = new Map<number, ChainAction>();
   for (const a of actions) {
-    const data = String(a.act.data.data ?? '');
+    const data = String(a.data.data ?? '');
     if (data.length < 16) continue;
     byId.set(Number(Buffer.from(data.slice(0, 16), 'hex').readBigUInt64LE(0)), a);
   }
@@ -198,7 +146,7 @@ export function applySettlements(store: Store, domain: string, rows: TransferRow
       status: row.status,
       dst_tx: a.trx_id,
       dst_block: a.block_num,
-      dst_time: seconds(a.timestamp),
+      dst_time: a.time,
     });
     filled++;
   }
@@ -238,49 +186,37 @@ async function backfillEvmSources(cfg: IndexerConfig, store: Store): Promise<num
 
 /**
  * One pass: every row that lacks something, completed from history. Cheap when
- * nothing is missing, which is the steady state — no row, no request.
+ * nothing is missing, which is the steady state — no row, no query.
  */
 export async function backfillFromHistory(cfg: IndexerConfig, store: Store): Promise<number> {
   let filled = 0;
-  const bridge = cfg.savanna.accounts.bridge;
   filled += await backfillEvmSources(cfg, store);
 
   const missingCredit = depositsMissingCredit(store);
   if (missingCredit.length) {
     const after = Math.min(...missingCredit.map((r) => r.src_time)) - SLACK_SECONDS;
-    filled += applyCredits(store, missingCredit, await hyperionActions(cfg.history, bridge, 'credit', after));
+    filled += applyCredits(store, missingCredit, store.actionsOf(SETTLEMENT_CHAIN, 'credit', after));
   }
   const missingBurn = withdrawalsMissingBurn(store);
   if (missingBurn.length) {
     const after = Math.min(...missingBurn.map((r) => r.src_time)) - SLACK_SECONDS;
-    filled += applyBurns(store, missingBurn, await hyperionActions(cfg.history, bridge, 'wdlog', after));
+    filled += applyBurns(store, missingBurn, store.actionsOf(SETTLEMENT_CHAIN, 'wdlog', after));
   }
 
-  if (!cfg.antelope.length) return filled;
+  // Each Antelope chain's own history: its vault's deposits and settlements.
   const missingDeplog = antelopeRowsMissing(cfg, store, 'deposit', 'src_tx');
   const missingRelease = antelopeRowsMissing(cfg, store, 'withdrawal', 'dst_tx');
-  if (!missingDeplog.length && !missingRelease.length) return filled;
-
-  // Which vault pays each Antelope domain, from the ledger's own routes.
-  const vaults = antelopeVaults(await getTableRows(cfg.savanna, { code: bridge, table: 'routes' }));
-
-  for (const [domain, { account: vault }] of vaults) {
-    // Each chain's own Hyperion; a domain this instance does not follow is skipped.
-    const history = cfg.antelope.find((a) => a.chain.domain === domain)?.history;
-    if (!history) continue;
-    const deposits = missingDeplog.filter((r) => r.domain === domain);
+  for (const { chain } of cfg.antelope) {
+    const deposits = missingDeplog.filter((r) => r.domain === chain.domain);
     if (deposits.length) {
       const after = Math.min(...deposits.map((r) => r.src_time)) - SLACK_SECONDS;
-      filled += applyDeplogs(store, domain, deposits, await hyperionActions(history, vault, 'deplog', after));
+      filled += applyDeplogs(store, chain.domain, deposits, store.actionsOf(chain.id, 'deplog', after));
     }
-    const withdrawals = missingRelease.filter((r) => r.domain === domain);
+    const withdrawals = missingRelease.filter((r) => r.domain === chain.domain);
     if (withdrawals.length) {
       const after = Math.min(...withdrawals.map((r) => r.src_time)) - SLACK_SECONDS;
-      const [released, expired] = await Promise.all([
-        hyperionActions(history, vault, 'release', after),
-        hyperionActions(history, vault, 'expire', after),
-      ]);
-      filled += applySettlements(store, domain, withdrawals, [...released, ...expired]);
+      const settled = [...store.actionsOf(chain.id, 'release', after), ...store.actionsOf(chain.id, 'expire', after)];
+      filled += applySettlements(store, chain.domain, withdrawals, settled);
     }
   }
   return filled;

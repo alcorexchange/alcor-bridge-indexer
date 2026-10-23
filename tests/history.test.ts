@@ -5,14 +5,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { Store, depositKey, withdrawalKey } from '../services/indexer/db.ts';
-import { applyBurns, applyCredits, applyDeplogs, applySettlements, type HistoryAction } from '../services/indexer/history.ts';
+import { Store, depositKey, withdrawalKey, type ChainAction } from '../services/indexer/db.ts';
+import { applyBurns, applyCredits, applyDeplogs, applySettlements } from '../services/indexer/history.ts';
 import { humanAmount } from '../services/indexer/units.ts';
 
 const WAX = '1181148696416462999';
 
-const action = (name: string, block: number, trx: string, timestamp: string, data: Record<string, unknown>): HistoryAction =>
-  ({ block_num: block, trx_id: trx, timestamp, act: { name, data } }) as HistoryAction;
+const action = (name: string, block: number, trx: string, timestamp: string, data: Record<string, unknown>): ChainAction => ({
+  chain: 'x',
+  seq: trx,
+  account: 'x',
+  name,
+  block_num: block,
+  trx_id: trx,
+  time: Math.floor(Date.parse(`${timestamp}Z`) / 1000),
+  data,
+});
 
 test('humanAmount drops trailing zeros and keeps the symbol', () => {
   assert.equal(humanAmount('2000000000', 8, 'WAX'), '20 WAX');
