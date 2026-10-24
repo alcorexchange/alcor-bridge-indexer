@@ -49,6 +49,7 @@ import {
 import { fetchFinalityRange, fetchRange, type ShipBlock } from '../../src/savanna/ship.ts';
 import { decodeTraces, type ActionTrace } from '../../src/savanna/traces.ts';
 import { BeforeRetention, findPolicyPublication } from '../../src/savanna/policyChain.ts';
+import { FailureStreak } from './streak.ts';
 import { assembleHandover } from '../../src/savanna/handover.ts';
 import {
   assembleWithdrawalArtifact,
@@ -85,6 +86,8 @@ function settlesPolicy(h: { submitRoot: { finality: { qcClaimTimestamp: number; 
 }
 
 const HANDOVER_DELAY = 12;
+/** A handover is retried each reconcile pass, which with a SHiP timeout in it can take a few minutes. */
+const HANDOVER_RETRY_GAP_MS = 10 * 60_000;
 
 type Pending = {
   burn: number;
@@ -126,8 +129,10 @@ export class SettlementFollower {
   private tree!: IncrementalTree;
   /** Generations published on the stream whose handover is not built yet, by block. */
   private handoversDue = new Map<number, number>();
-  /** Handovers that failed to build once; retried only by a restart. */
-  private handoversFailed = new Set<number>();
+  /** Handovers that failed to build: tried again each reconcile pass, an incident once failing for five minutes. */
+  private handoversFailing = new Map<number, FailureStreak>();
+  /** Handovers whose blocks state-history no longer holds: never buildable here, said once. */
+  private handoversGone = new Set<number>();
 
   readonly state: SettlementState = {
     at: 0, head: 0, leaves: 0, caughtUp: false, appended: 0, mismatches: 0,
@@ -443,28 +448,41 @@ export class SettlementFollower {
       });
       if (existing) this.store.replaceHandover(generation, block, body);
       else this.store.putHandover(generation, block, body);
+      this.handoversFailing.delete(generation);
       console.log(`[savanna] handover to generation ${generation} ${existing ? 'rebuilt' : 'stored'} (block ${block}, certified ${h.transition})`);
       return true;
     } catch (err) {
-      this.handoversFailed.add(generation);
       // An old one past state-history stays as it was: nothing to report again.
-      if (existing) return true;
-      // The generation it hands over FROM was published before what state-history
-      // holds: permanent, and nothing here can change it. Said once, not filed.
+      if (existing) {
+        this.handoversGone.add(generation);
+        return true;
+      }
+      // Its blocks, or the generation it hands over FROM, are older than what
+      // state-history holds: permanent, and nothing here can change it. Said once, not filed.
       if (err instanceof BeforeRetention) {
+        this.handoversGone.add(generation);
         console.log(`[savanna] handover to generation ${generation} cannot be built: ${err.message}`);
         return false;
       }
-      this.store.incident('handover', `generation ${generation} at block ${block}: ${(err as Error).message}`);
+      // A node that did not answer this once: tried again next pass, filed only if it keeps failing.
+      let streak = this.handoversFailing.get(generation);
+      if (!streak) {
+        streak = new FailureStreak(
+          (detail) => this.store.incident('handover', `generation ${generation} at block ${block}: ${detail}`),
+          { gapMs: HANDOVER_RETRY_GAP_MS },
+        );
+        this.handoversFailing.set(generation, streak);
+      }
+      streak.failed((err as Error).message);
       console.log(`[savanna] handover to generation ${generation} failed: ${(err as Error).message}`);
       return false;
     }
   }
 
-  /** Every published generation without a stored handover, tried once per process. */
+  /** Every published generation without a stored handover, tried each pass until built or out of reach. */
   private async freezeMissingHandovers(): Promise<void> {
     for (const { generation, block } of this.store.listPolicies()) {
-      if (this.handoversDue.has(generation) || this.handoversFailed.has(generation)) continue;
+      if (this.handoversDue.has(generation) || this.handoversGone.has(generation)) continue;
       if (block + HANDOVER_DELAY > this.state.at) continue;
       await this.freezeHandover(generation, block);
     }

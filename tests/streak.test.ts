@@ -28,3 +28,10 @@ test('failures that keep coming for five minutes are said once, with the latest 
   for (let t = 20 * MIN; t <= 26 * MIN; t += 10_000) streak.failed('HTTP 502', t);
   assert.deepEqual(said, ['failing for 5 min: timeout', 'failing for 5 min: HTTP 502']);
 });
+
+test('a loop that retries slowly counts with a longer gap', () => {
+  const said: string[] = [];
+  const streak = new FailureStreak((d) => said.push(d), { gapMs: 10 * MIN });
+  for (let t = 0; t <= 6 * MIN; t += 3 * MIN) streak.failed('SHiP timeout', t);
+  assert.deepEqual(said, ['failing for 6 min: SHiP timeout']);
+});

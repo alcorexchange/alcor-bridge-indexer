@@ -29,10 +29,10 @@ import type { SavannaChain } from '../chains/savanna.ts';
 import { antelopeRpc } from '../net/antelope.ts';
 import { timestampToSlot } from '../proof/pack.ts';
 import { finalityDigest } from './finality.ts';
-import { findPolicyPublication } from './policyChain.ts';
+import { BeforeRetention, findPolicyPublication } from './policyChain.ts';
 import { policyDigest, type FinalizerPolicy } from './policyDiff.ts';
 import { parseQcExtension, verifyQc, QC_EXTENSION_ID, type Qc, type QcVerdict } from './qc.ts';
-import { fetchFinalityRange, type ShipBlock } from './ship.ts';
+import { fetchFinalityRange, fetchStatus, type ShipBlock } from './ship.ts';
 import { submitRootArgs, type SubmitRootArgs } from './withdrawalProof.ts';
 
 export type Handover = {
@@ -81,6 +81,11 @@ export async function assembleHandover(
   next: FinalizerPolicy,
   policyOf: (generation: number) => Promise<FinalizerPolicy>,
 ): Promise<Handover> {
+  // Below what state-history holds the stream never answers: say so now, not as a timeout a minute later.
+  const floor = (await fetchStatus(ship)).finalityDataBegin;
+  if (floor !== undefined && block - 1 < floor) {
+    throw new BeforeRetention(`block ${block} is older than block ${floor}, the oldest finality data state-history still holds`);
+  }
   const window = await fetchFinalityRange(ship, block - 1, block + 8);
   const fd = window.find((b) => b.this_block.block_num === block)?.finality_data;
   if (!fd) throw new Error(`no finality data for block ${block}`);

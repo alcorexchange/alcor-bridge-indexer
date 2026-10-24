@@ -17,7 +17,7 @@ export class FailureStreak {
   private last = 0;
   private said = false;
 
-  constructor(say: (detail: string) => void, lastingMs = LASTING_MS, gapMs = GAP_MS) {
+  constructor(say: (detail: string) => void, { lastingMs = LASTING_MS, gapMs = GAP_MS } = {}) {
     this.say = say;
     this.lastingMs = lastingMs;
     this.gapMs = gapMs;
