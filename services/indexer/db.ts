@@ -530,8 +530,10 @@ export class Store {
     return (this.db.prepare('SELECT reading FROM readings WHERE key = ?').get(key) as { reading: string } | undefined)?.reading;
   }
 
-  hasReadings(): boolean {
-    return this.db.prepare('SELECT 1 FROM readings LIMIT 1').get() !== undefined;
+  /** The transfers whose last reading was in this state. */
+  readingsIn(state: string): string[] {
+    return (this.db.prepare(`SELECT key FROM readings WHERE json_extract(reading, '$.state') = ?`).all(state) as { key: string }[])
+      .map((r) => r.key);
   }
 
   /** Every reading at once, in one transaction: the baseline a new log starts from. */
@@ -566,10 +568,11 @@ export class Store {
 
   /**
    * Events for some transfers, by key, or by addresses or accounts at either
-   * end (lowercased); for every transfer when neither is given. After `after`, oldest first;
-   * without it, the newest `limit`, still oldest first.
+   * end (lowercased); for every transfer when neither is given. Only the `changes`
+   * named, when they are. After `after`, oldest first; without it, the newest
+   * `limit`, still oldest first.
    */
-  events(q: { keys?: string[]; parties?: string[]; after?: number; limit: number }): EventRow[] {
+  events(q: { keys?: string[]; parties?: string[]; changes?: string[]; after?: number; limit: number }): EventRow[] {
     const which: string[] = [];
     const args: (string | number)[] = [];
     if (q.keys?.length) {
@@ -581,7 +584,11 @@ export class Store {
       which.push(`sender IN (${marks}) OR recipient IN (${marks})`);
       args.push(...q.parties, ...q.parties);
     }
-    const filter = which.length ? `(${which.join(' OR ')})` : '1';
+    let filter = which.length ? `(${which.join(' OR ')})` : '1';
+    if (q.changes?.length) {
+      filter += ` AND change IN (${q.changes.map(() => '?').join(',')})`;
+      args.push(...q.changes);
+    }
     if (q.after !== undefined) {
       return this.db
         .prepare(`SELECT * FROM events WHERE ${filter} AND id > ? ORDER BY id LIMIT ?`)

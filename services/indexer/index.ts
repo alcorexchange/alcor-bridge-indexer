@@ -300,6 +300,7 @@ const shutdown = (signal: string) => {
   for (const follower of evms) follower.stop();
   for (const keeper of keepers.values()) keeper.stop();
   for (const h of histories) h.stop();
+  deps.events.stop();
   api.close();
   // Streams (`/v1/stream`) never end on their own; their pages reconnect to the next process.
   api.closeAllConnections();

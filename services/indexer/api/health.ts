@@ -48,7 +48,8 @@ async function holdAlarms(deps: Deps): Promise<string[]> {
   const shown = (row: TransferRow) => {
     const asset = assetFor(row.token, row.domain);
     const amount = asset && row.amount !== null ? humanAmount(row.amount, asset.precision, asset.symbol) : `${row.amount} units`;
-    return `#${row.ref} ${amount} ${row.direction === 'deposit' ? 'from' : 'to'} ${ctx.chainName(row.domain)}`;
+    // By its key, which a page and an alert can link to: `w:441`, `d:1:138`.
+    return `${row.key} ${amount} ${row.direction === 'deposit' ? 'from' : 'to'} ${ctx.chainName(row.domain)}`;
   };
   const clock = (t: number) => new Date(t * 1000).toISOString().slice(11, 16) + ' UTC';
 

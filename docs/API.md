@@ -476,6 +476,9 @@ look at:
 - every withdrawal of the last 24 hours that took at least half of its route's
   `maxWithdrawal`.
 
+A crossing is named by its key (`w:441`, `d:1:138`), as `/v1/transfers/<key>`
+and `/v1/activity/<key>` take it.
+
 ```json
 {
   "instance": "telos-production",
@@ -1321,6 +1324,7 @@ that sends a refused deposit back are never items of their own.
     "asset": { "symbol": "ETH", "precision": 8 }, "amount": "0.00206223",
     "state": "action_needed", "waitingOn": "user",
     "stage": "ready: release it on Ethereum",
+    "percent": 50, "exact": true, "etaAt": null,
     "startedAt": 1791210219, "finishedAt": null,
     "srcTx": "a8ae…b191", "dstTx": null } ],
   "cursor": "MTc5MTIxMDIxOXxk…" }
@@ -1333,6 +1337,13 @@ that sends a refused deposit back are never items of their own.
 | `returned` | not delivered, sent back: `bounced`, `expired`, `refunded`; a hop `bounced` or `returned` |
 | `in_progress` | everything else, the bridge's move — a hop `returning` included |
 
+- `stage` says what is happening now, a sentence to show ("7 of 12
+  confirmations on Ethereum"); `percent` is 0–100 for a bar; `exact` is true
+  when counted from the chain (confirmations) and false when estimated from
+  measured timings (finality, producers confirming) — an estimate moves in
+  steps of five. `etaAt` is the unix second the bridge's own part should be
+  done: count down to it; in the past means running late, "any moment"; null
+  when finished or waiting on the user.
 - `amount` is a decimal string in `asset.precision`, never a float. `asset`
   and `amount` are `null` for a token this build has no listing for.
 - `from.address` is who sent it: an EVM address or an account. For a
@@ -1398,7 +1409,7 @@ says what happened, in one word:
 | `action_needed` | the next step became the user's: a release to sign on an EVM chain |
 | `delivered` | at the recipient |
 | `returned` | given back, or on its way back |
-| `progress` | anything else: a stage, a transaction, back in the bridge's hands |
+| `progress` | anything else: a confirmation, a stage, a transaction, back in the bridge's hands |
 
 `previous` is `{ state, stage }` as it was, null for `new`. A write that changes
 nothing a person sees — the indexer reading a chain again — sends nothing.
@@ -1417,18 +1428,22 @@ comes instead — the same handler. A client reconnecting by hand passes
 - Nothing here is faster than the indexer: a deposit appears when its chain is
   scanned, as on a poll. What goes away is the poll's own delay.
 - Up to 10 streams from one address; more is `429` with `RATE_LIMITED`.
-- What moves with the clock and not with a write — `progress.percent` while
-  confirmations accrue — is read when wanted, from `/v1/transfers/<key>`.
+- Progress that moves with the clock is sent too: each confirmation ("7 of
+  12" → "8 of 12"), each five-percent step of an estimate, a hold lifting —
+  as `progress`, at most one every few seconds per transfer. A later `etaAt`
+  alone is not a change. The bar and the countdown need nothing else.
 
 ### `GET /v1/events`
 
 ```
-?key= &party= &after= &limit=     (limit 1–100, default 10)
+?key= &party= &change= &after= &limit=     (limit 1–100, default 10)
 ```
 
 The same events, listed, oldest first: without `after` the newest `limit` (a
 notification panel), with it the ones after (polling instead of streaming —
-pass back `last` each time). Kept 30 days.
+pass back `last` each time). `change` is repeatable: only those — a bell asks
+for `new`, `action_needed`, `delivered`, `returned` and leaves out the
+`progress` ticks. Kept 30 days.
 
 ```json
 { "events": [

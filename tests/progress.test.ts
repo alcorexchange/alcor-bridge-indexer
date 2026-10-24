@@ -55,7 +55,7 @@ test('an Ethereum deposit on the fast path is counted in confirmations, as the l
 
 test('a deposit over the fast ceiling waits for finality, estimated', () => {
   const p = transferProgress(row({ amount: '6000000000', src_time: NOW - 450 }), ctx);
-  assert.deepEqual(p, { stage: 'waiting for Ethereum to finalize', percent: 48, etaSeconds: 450, exact: false, waitingOn: 'bridge' });
+  assert.deepEqual(p, { stage: 'waiting for Ethereum to finalize', percent: 45, etaSeconds: 450, exact: false, waitingOn: 'bridge' });
 });
 
 test('a WAX deposit is estimated from the measured producer rounds, and never claims to be done', () => {

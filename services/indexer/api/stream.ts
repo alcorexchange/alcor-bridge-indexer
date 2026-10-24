@@ -20,7 +20,7 @@
 import type { ServerResponse } from 'node:http';
 
 import { activities, activityOf, newestFirst, type Activity } from '../activity.ts';
-import type { EventLog, TransferEvent } from '../events.ts';
+import { CHANGES, type Change, type EventLog, type TransferEvent } from '../events.ts';
 import { activityContext } from './context.ts';
 import type { Deps } from './deps.ts';
 import { BadRequest, exact, fail, intParam, json, type Reply, type Request, type Route } from './http.ts';
@@ -180,6 +180,14 @@ function filterOf(q: URLSearchParams): Filter {
   };
 }
 
+/** `change`, repeatable: only these; a bell asks for every one but `progress`. */
+function changesOf(q: URLSearchParams): Change[] | undefined {
+  const asked = q.getAll('change').filter(Boolean);
+  const unknown = asked.find((c) => !(CHANGES as readonly string[]).includes(c));
+  if (unknown !== undefined) throw new BadRequest(`change is one of ${CHANGES.join(', ')}`);
+  return asked.length ? (asked as Change[]) : undefined;
+}
+
 /** The id a reconnecting stream had: the browser's header, or `after` for a client that reconnects by hand. */
 function lastEventIdOf({ q, header }: Request): number | undefined {
   const raw = header('last-event-id') ?? q.get('after') ?? undefined;
@@ -218,7 +226,7 @@ export const streamRoutes: Route[] = [
       resolve(deps, filter);
       const after = intParam(q, 'after', 0, Number.MAX_SAFE_INTEGER);
       const limit = intParam(q, 'limit', 1, 100) ?? 10;
-      const events = deps.events.list({ ...asQuery(filter), after, limit });
+      const events = deps.events.list({ ...asQuery(filter), changes: changesOf(q), after, limit });
       return json(200, { events, last: events.at(-1)?.id ?? after ?? deps.store.lastEventId() });
     },
   },

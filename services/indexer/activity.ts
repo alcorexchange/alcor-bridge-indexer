@@ -39,6 +39,16 @@ export type Activity = {
   state: ActivityState;
   waitingOn: Progress['waitingOn'];
   stage: string;
+  /** 0–100. Counted confirmations move it a block at a time, an estimate in steps of five. */
+  percent: number;
+  /** Counted from the chain (true) or estimated from measured timings (false). */
+  exact: boolean;
+  /**
+   * Unix seconds when the bridge's own part should be done; null when finished
+   * or waiting on a person. A moment rather than a countdown, so an item pushed
+   * to a page does not go stale: count down to it.
+   */
+  etaAt: number | null;
   /** When it was sent, on the chain it was sent from. */
   startedAt: number;
   /** When it landed where it ended: delivered, or back with the sender. Null until then, or where unrecorded. */
@@ -58,6 +68,15 @@ export type ActivityContext = {
 
 const DELIVERED: TransferStatus[] = ['credited', 'forwarded', 'released'];
 const RETURNED: TransferStatus[] = ['bounced', 'expired', 'refunded'];
+
+/** How far along, as an item carries it. */
+const along = (p: Progress, now: number) => ({
+  waitingOn: p.waitingOn,
+  stage: p.stage,
+  percent: p.percent,
+  exact: p.exact,
+  etaAt: p.etaSeconds === null ? null : now + p.etaSeconds,
+});
 
 /** Not finished: whose move it is decides between the two open states. */
 const open = (p: Progress): ActivityState => (p.waitingOn === 'user' ? 'action_needed' : 'in_progress');
@@ -130,8 +149,7 @@ function directActivity(row: TransferRow, ctx: ActivityContext, backOf: (d: Tran
     to: deposit ? { chain: SETTLEMENT_CHAIN, recipient: row.account } : { chain: far, recipient: row.evm_address },
     ...priced(row, ctx),
     state: stateOf(row, progress),
-    waitingOn: progress.waitingOn,
-    stage: progress.stage,
+    ...along(progress, ctx.progress.now),
     startedAt: row.src_time,
     finishedAt: end.at,
     srcTx: row.src_tx,
@@ -157,8 +175,7 @@ function hopActivity(store: Store, row: TransferRow, ctx: ActivityContext, backO
     to: { chain: j.to?.chain ?? null, recipient: j.to?.recipient ?? null },
     ...priced(row, ctx),
     state,
-    waitingOn: j.progress.waitingOn,
-    stage: j.progress.stage,
+    ...along(j.progress, ctx.progress.now),
     startedAt: row.src_time,
     finishedAt: end.at,
     srcTx: row.src_tx,

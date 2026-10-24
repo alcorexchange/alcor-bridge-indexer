@@ -12,6 +12,7 @@ import { activityContext } from '../services/indexer/api/context.ts';
 import type { IndexerConfig } from '../services/indexer/config.ts';
 import { Store, depositKey, withdrawalKey } from '../services/indexer/db.ts';
 import { EventLog } from '../services/indexer/events.ts';
+import { depositEta } from '../src/chains/eta.ts';
 import { EVM_CHAINS } from '../src/chains/evm.ts';
 
 const USER = '0x' + 'ab'.repeat(20);
@@ -122,6 +123,43 @@ test('what the log holds from before is the baseline: the first change after it 
   assert.deepEqual(deps.events.list({ limit: 10 }).map((e) => [e.change, e.transfer.key, e.previous?.state]), [
     ['delivered', 'd:1:1', 'in_progress'],
   ]);
+});
+
+test('progress that moves with the clock is an event as well; a later ETA alone is not', async () => {
+  const store = new Store(':memory:');
+  deposit(store, 1, 'seen');
+  const deps = { cfg, store, evms: [], keepers: new Map(), histories: [], startedAt: 0 } as unknown as Deps;
+  // No follower and no listed route: finality is estimated, so the clock alone moves it.
+  let now = 1001;
+  const log = new EventLog(store, () => {
+    const c = activityContext(deps);
+    return { ...c, progress: { ...c.progress, now } };
+  }, 20);
+  log.start();
+  try {
+    const eta = depositEta(EVM_CHAINS.mainnet).seconds;
+    now = 1001 + Math.ceil(eta / 2);
+    await settle();
+    const [moved] = log.list({ limit: 10 });
+    assert.equal(log.list({ limit: 10 }).length, 1);
+    assert.deepEqual([moved.change, moved.transfer.state, moved.transfer.percent, moved.transfer.exact], ['progress', 'in_progress', 45, false]);
+    assert.equal(moved.transfer.etaAt, 1001 + eta);
+
+    now += 1;
+    await settle();
+    assert.equal(log.list({ limit: 10 }).length, 1, 'the same step a second later is no event');
+
+    deposit(store, 1, 'credited');
+    await settle();
+    now += eta;
+    await settle();
+    assert.deepEqual(log.list({ limit: 10 }).map((e) => [e.change, e.transfer.percent, e.transfer.etaAt]), [
+      ['progress', 45, 1001 + eta],
+      ['delivered', 100, null],
+    ]);
+  } finally {
+    log.stop();
+  }
 });
 
 test('a stream opens on a snapshot, then each change in a word, and nothing for a rewrite', async () => {
@@ -272,6 +310,12 @@ test('/v1/events lists the newest, then after an id, by a leg\'s key too', async
 
     const one = await get(`?key=${encodeURIComponent(depositKey(1, 1))}`);
     assert.deepEqual(one.events.map((e: any) => e.change), ['new', 'delivered']);
+
+    const bell = await get('?change=delivered&change=returned');
+    assert.deepEqual(bell.events.map((e: any) => [e.change, e.transfer.key]), [['delivered', 'd:1:1']]);
+    const wrong = await fetch(`${base}/v1/events?change=moved`);
+    assert.equal(wrong.status, 400);
+    assert.equal((await wrong.json()).code, 'INVALID_REQUEST');
   } finally {
     server.close();
     restore();

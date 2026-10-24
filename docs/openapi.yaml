@@ -207,6 +207,10 @@ paths:
       parameters:
         - { name: key, in: query, description: 'A transfer, by any of its keys; repeatable.', schema: { type: string } }
         - { name: party, in: query, description: 'Repeatable, up to 10.', schema: { type: string } }
+        - name: change
+          in: query
+          description: 'Only these; repeatable. A notification bell asks for every one but `progress`.'
+          schema: { $ref: '#/components/schemas/Change' }
         - { name: after, in: query, schema: { type: integer, minimum: 0 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
       responses:
@@ -555,7 +559,7 @@ components:
     Activity:
       type: object
       description: One transfer as its sender sees it.
-      required: [key, kind, from, to, asset, amount, state, waitingOn, stage, startedAt, finishedAt, srcTx, dstTx]
+      required: [key, kind, from, to, asset, amount, state, waitingOn, stage, percent, exact, etaAt, startedAt, finishedAt, srcTx, dstTx]
       properties:
         key: { type: string, description: 'The deposit''s key for a hop, the row''s for a direct crossing.' }
         kind: { type: string, enum: [direct, hop] }
@@ -577,7 +581,15 @@ components:
         amount: { type: [string, 'null'], description: 'A decimal in `asset.precision`, never a float.' }
         state: { $ref: '#/components/schemas/State' }
         waitingOn: { type: [string, 'null'], enum: [bridge, user, null] }
-        stage: { type: string }
+        stage: { type: string, description: 'What is happening now, in words: "7 of 12 confirmations on Ethereum".' }
+        percent: { type: integer, minimum: 0, maximum: 100, description: 'Counted confirmations move it a block at a time, an estimate in steps of five.' }
+        exact: { type: boolean, description: 'Counted from the chain, or estimated from measured timings.' }
+        etaAt:
+          type: [integer, 'null']
+          description: |
+            Unix seconds when the bridge's own part should be done; null when
+            finished or waiting on a person. A moment, not a countdown: count
+            down to it. In the past means running late — "any moment".
         startedAt: { type: integer, description: 'Unix seconds, on the chain it was sent from.' }
         finishedAt: { type: [integer, 'null'] }
         srcTx: { type: [string, 'null'] }

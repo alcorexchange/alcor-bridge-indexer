@@ -50,6 +50,9 @@ const PUSH_SECONDS = 5;
 
 const done = (stage: string): Progress => ({ stage, percent: 100, etaSeconds: null, exact: true, waitingOn: null });
 
+/** An estimate moves in steps this big: it is not more precise than that, and each step is an event. */
+const ESTIMATE_STEP = 5;
+
 /**
  * A step estimated from the time it usually takes: how much of it has passed,
  * held under `cap` so an estimate never claims to be finished, and a few
@@ -57,9 +60,10 @@ const done = (stage: string): Progress => ({ stage, percent: 100, etaSeconds: nu
  */
 function byTime(stage: string, since: number, eta: Eta, now: number, cap = 95): Progress {
   const elapsed = Math.max(0, now - since);
+  const percent = Math.min(cap, (elapsed / eta.seconds) * cap);
   return {
     stage,
-    percent: Math.min(cap, Math.round((elapsed / eta.seconds) * cap)),
+    percent: Math.floor(percent / ESTIMATE_STEP) * ESTIMATE_STEP,
     etaSeconds: Math.max(PUSH_SECONDS, eta.seconds - elapsed),
     exact: false,
     waitingOn: 'bridge',

@@ -8,6 +8,12 @@
  * the same transaction. A write that changed nothing a person sees — the
  * indexer re-reading a chain and writing the same row — makes none.
  *
+ * Some progress moves with the clock rather than with a write: confirmations
+ * accrue as the far chain's head moves, an estimate runs on, a hold lifts. So
+ * every transfer in the bridge's hands is read again every few seconds as well,
+ * and "7 of 12 confirmations" becoming "8 of 12" is an event like any other.
+ * The ETA is left out of the comparison — it is a moment, carried as it stands.
+ *
  * What changed is said in one word, `change`, so a page can tell a toast from a
  * quiet update without comparing anything itself:
  *
@@ -48,28 +54,50 @@ export type EventListener = (event: TransferEvent, written: string[]) => void;
 const KEEP_SECONDS = 30 * 86_400;
 /** Writes this close together are read once: a block's worth of a replay is one pass. */
 const BATCH_MS = 50;
+/** How often a transfer in the bridge's hands is read again: no faster than this does a clock-driven change come. */
+const TICK_MS = 3000;
+/** The shape readings are compared in; another one in the store is replaced, quietly, on start. */
+const READINGS = 'events:readings';
+const READINGS_SHAPE = '2';
 
 export class EventLog {
   private readonly store: Store;
   private readonly context: () => ActivityContext;
+  private readonly tickMs: number;
   private readonly listeners = new Set<EventListener>();
   /** Keys written since the last pass. */
   private readonly pending = new Set<string>();
   private batch: NodeJS.Timeout | undefined;
+  /** Transfers in the bridge's hands: read again on every tick. */
+  private readonly moving = new Set<string>();
+  private clock: NodeJS.Timeout | undefined;
   private prunedAt = 0;
 
-  constructor(store: Store, context: () => ActivityContext) {
+  constructor(store: Store, context: () => ActivityContext, tickMs = TICK_MS) {
     this.store = store;
     this.context = context;
+    this.tickMs = tickMs;
   }
 
-  /** Start from where everything stands when the log is empty, then record each change. */
+  /**
+   * Start from where everything stands when the log is empty, or its readings
+   * are of another shape; then record each change.
+   */
   start(): void {
-    if (!this.store.hasReadings()) {
-      this.store.putReadings(activities(this.store, this.context()).map((a) => [a.key, JSON.stringify(a)]));
+    if (this.store.getMeta(READINGS) !== READINGS_SHAPE) {
+      this.store.putReadings(activities(this.store, this.context()).map((a) => [a.key, readingOf(a)]));
+      this.store.setMeta(READINGS, READINGS_SHAPE);
     }
+    for (const key of this.store.readingsIn('in_progress')) this.moving.add(key);
     this.store.onChange((key) => this.written(key));
+    this.clock = setInterval(() => this.moving.forEach((key) => this.written(key)), this.tickMs).unref();
     this.prune();
+  }
+
+  /** No more reading: the store is about to close. */
+  stop(): void {
+    clearInterval(this.clock);
+    clearTimeout(this.batch);
   }
 
   onEvent(listener: EventListener): () => void {
@@ -78,7 +106,7 @@ export class EventLog {
   }
 
   /** As stored, for a page catching up or listing; see `Store.events`. */
-  list(q: { keys?: string[]; parties?: string[]; after?: number; limit: number }): TransferEvent[] {
+  list(q: { keys?: string[]; parties?: string[]; changes?: Change[]; after?: number; limit: number }): TransferEvent[] {
     return this.store.events(q).map(served);
   }
 
@@ -106,13 +134,18 @@ export class EventLog {
     const byTransfer = new Map<string, { a: Activity; written: string[] }>();
     for (const key of keys) {
       const a = activityOf(this.store, key, ctx);
-      if (!a) continue;
+      if (!a) {
+        this.moving.delete(key);
+        continue;
+      }
+      if (a.state === 'in_progress') this.moving.add(a.key);
+      else this.moving.delete(a.key);
       const seen = byTransfer.get(a.key);
       if (seen) seen.written.push(key);
       else byTransfer.set(a.key, { a, written: [key] });
     }
     for (const { a, written } of byTransfer.values()) {
-      const reading = JSON.stringify(a);
+      const reading = readingOf(a);
       const before = this.store.reading(a.key);
       if (before === reading) continue;
       const was = before === undefined ? undefined : (JSON.parse(before) as Activity);
@@ -143,6 +176,9 @@ export class EventLog {
     this.store.pruneEvents(now - KEEP_SECONDS);
   }
 }
+
+/** What is compared: the item without its ETA, which is a moment, not a change. */
+const readingOf = (a: Activity): string => JSON.stringify({ ...a, etaAt: undefined });
 
 /** What changed, in one word. */
 export function changeOf(was: Activity | undefined, now: Activity): Change {
