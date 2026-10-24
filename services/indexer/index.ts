@@ -42,6 +42,7 @@ import { EventLog } from './events.ts';
 import { warmListings } from './fast.ts';
 import { applySwapActions, routeOf } from './swaps.ts';
 import { ActionFollower, type HistorySource, type Watch } from './actions.ts';
+import { FailureStreak } from './streak.ts';
 
 const cfg = loadConfig();
 const startedAt = Date.now();
@@ -167,7 +168,11 @@ let stopping = false;
  * Keep a loop alive across failures, backing off so a chain that is down does
  * not turn into a hot retry.
  */
+/** An incident under `name` once its failures have lasted (`streak.ts`); a single one is only logged. */
+const streakOf = (name: string) => new FailureStreak((detail) => store.incident(name, detail));
+
 async function supervise(name: string, run: () => Promise<void>): Promise<void> {
+  const streak = streakOf(name);
   let wait = 2_000;
   while (!stopping) {
     try {
@@ -180,7 +185,7 @@ async function supervise(name: string, run: () => Promise<void>): Promise<void> 
       await sleep(5_000);
       wait = 2_000;
     } catch (err) {
-      store.incident(name, (err as Error).message);
+      streak.failed((err as Error).message);
       console.log(`[${name}] ${(err as Error).message}; restarting in ${wait / 1000}s`);
       await sleep(wait);
       wait = Math.min(wait * 2, 60_000);
@@ -263,12 +268,13 @@ if (cfg.relayerDir && cfg.antelope.length) {
 /** Sui: the vault's events, for the Sui half of each crossing (services/indexer/suiVault.ts). */
 for (const sui of cfg.sui) {
   void (async function suiLoop() {
+    const streak = streakOf('sui');
     while (!stopping) {
       try {
         const n = await followSuiVault(cfg, store, sui);
         if (n) console.log(`[sui] ${n} vault event(s)`);
       } catch (err) {
-        store.incident('sui', (err as Error).message);
+        streak.failed((err as Error).message);
         console.log(`[sui] ${(err as Error).message}`);
       }
       await sleep(cfg.pollMs);
@@ -279,12 +285,13 @@ for (const sui of cfg.sui) {
 /** NEAR: the vault's log lines, for the NEAR half of each crossing (services/indexer/nearVault.ts). */
 for (const near of cfg.near) {
   void (async function nearLoop() {
+    const streak = streakOf('near');
     while (!stopping) {
       try {
         const n = await followNearVault(cfg, store, near);
         if (n) console.log(`[near] ${n} vault log(s)`);
       } catch (err) {
-        store.incident('near', (err as Error).message);
+        streak.failed((err as Error).message);
         console.log(`[near] ${(err as Error).message}`);
       }
       await sleep(cfg.pollMs);
