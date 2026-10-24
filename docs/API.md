@@ -4,8 +4,10 @@
 https://telos.alcor.exchange/api/bridge
 ```
 
-Read-only, no authentication, `access-control-allow-origin: *`, every response
-`cache-control: no-store`. JSON throughout.
+No authentication, `access-control-allow-origin: *`, JSON throughout. The
+indexer only reads (`GET`); beside it under the same base, the courier takes
+`POST /v1/deposit-addresses`. Every response is `cache-control: no-store` but
+the public aggregates, shared for a few seconds (see *Polling*).
 
 This document is served by the API it describes, at
 `https://telos.alcor.exchange/api/bridge/docs` — so it cannot describe a version
@@ -1555,7 +1557,7 @@ wallet sends to the vault, in order.
   "chain": "near",
   "near": {
     "network": "mainnet",
-    "vault": "vault.alcor.near",
+    "vault": "alcor-bridge.near",
     "token": "NEAR",
     "recipient": "alice.near",
     "recipientAddress": "<sha256 of the recipient's account id, hex>",
@@ -1564,11 +1566,11 @@ wallet sends to the vault, in order.
     "rootTrusted": false,
     "action": "release",
     "calls": [
-      { "contract": "vault.alcor.near", "method": "register_key", "args": { "key": "<base64>", "pop": "<base64>" },
+      { "contract": "alcor-bridge.near", "method": "register_key", "args": { "key": "<base64>", "pop": "<base64>" },
         "deposit": "10000000000000000000000", "gas": "100000000000000" },
-      { "contract": "vault.alcor.near", "method": "submit_root", "args": { "finality": { … }, "bits": "…", "signature": "…", "policy_keys": […],
+      { "contract": "alcor-bridge.near", "method": "submit_root", "args": { "finality": { … }, "bits": "…", "signature": "…", "policy_keys": […],
         "pending_policy": null, "pending_bits": null, "pending_signature": null }, "deposit": "…", "gas": "…" },
-      { "contract": "vault.alcor.near", "method": "release", "args": { "proof": { … }, "token": "NEAR", "recipient": "alice.near" },
+      { "contract": "alcor-bridge.near", "method": "release", "args": { "proof": { … }, "token": "NEAR", "recipient": "alice.near" },
         "deposit": "…", "gas": "…" }
     ]
   }
@@ -1622,6 +1624,34 @@ for too many new addresses from one client.
 | `POST /v1/deposit-addresses` | `{ "chain": "telos" \| "<chain id>", "to": "<recipient>" }` → the address on every EVM chain that forwards what arrives to that destination. The same request always answers the same. |
 | `GET /v1/deposit-addresses/<0x…>` | its destination, holds per chain, and its last forwards |
 | `GET /v1/fees` | what a forward and a delivered withdrawal cost now, per chain and token |
+
+- `POST` answers `address` (lowercase), `destination`, `telosTo`, `leg`,
+  `factory`, `feeCap` (`"1%"`) and `chains[]`: the networks the address works on
+  (Ethereum, BSC, Polygon), each with `tokens[]` — `symbol`, `token`,
+  `decimals`, and `min`/`max` in raw units **for this destination** (`max` null
+  when unlimited). `INVALID_REQUEST` where the deposit would only come back (no
+  such account, the bridge's own account, the zero address, a recipient that
+  does not fit the chain); `RATE_LIMITED` past 20 new addresses an hour per
+  client or 2000 a day in all — an address registered before always answers.
+- **Compute the address yourself and refuse one that differs.** It is
+  `CREATE2(factory, keccak256(abi.encode(uint64 telosTo, string leg)),
+  keccak256(EIP-1167 clone of the factory's first contract, CREATE(factory, 1)))`,
+  the factory `0x6bc5481445aaed9e37db72fdbd989b857a15c362` on all three chains.
+  `telosTo` is the Telos account as a name's uint64 — the recipient's own to
+  stay on Telos (`leg` empty), `hop.alcor` to go on, with `leg`
+  `<domain>:<recipient>` (an EVM or Sui address lowercase, a NEAR id as `0x` +
+  sha256 of it, an Antelope name as is). `telos:alice` is
+  `0x242333bB7361fA6C9B716951a415341e9f45D7F8`, `wax:alice`
+  `0xA1AD9334E53e7136B3962cdcECf7Ef2c82F86a29`.
+- `GET /v1/deposit-addresses/<address>`: the destination, `held` (a token that
+  came back from the destination waits there; keys `<chainId>:<address>:<token>`)
+  and the last 20 `forwards`. Follow what was forwarded on `/v1/stream?party=<the address>`.
+- `GET /v1/fees`: per network and token, `deposit` (a forward's gas, raw units,
+  before the 1% cap), `forwardsFrom` (the least forwarded now; less waits at the
+  address) and `withdrawal` (the fee for a delivered withdrawal, canonical
+  units: the `<fee>` in `<chainId>:<address>:<fee>`).
+- An address with an EVM destination never carries a delivery fee: the
+  recipient releases what it delivers there.
 
 ## Sending the transaction
 
@@ -1825,7 +1855,7 @@ already have and let the next poll move the row.
 |---|---|
 | `400` | a parameter out of range: `limit`, `state`, `period`, a `cursor` this API did not hand out |
 | `404` | unknown route, unknown transfer, or no proof available yet — for a deposit that means the fast path is not on offer *and* nothing is frozen, and `fastUnavailable` says why |
-| `405` | anything but `GET` (and `OPTIONS`, a browser's preflight) |
+| `405` | anything but `GET` (and `OPTIONS`, a browser's preflight) on the indexer's paths |
 | `429` | too many streams from one address |
 | `500` | something the indexer could not do; `error` says what |
 | `502` | a chain or service the answer needed did not answer (a plan, a quote) |
