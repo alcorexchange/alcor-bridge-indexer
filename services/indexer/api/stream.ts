@@ -31,7 +31,9 @@ const PER_IP = 10;
 const IN_ALL = 2000;
 /** Keys one stream may follow. */
 const KEYS = 50;
-/** Transfers in a snapshot of a party or of everything: the newest. */
+/** Parties one stream may follow: a person's wallets on several chains. */
+const PARTIES = 10;
+/** Transfers in a snapshot of parties or of everything: the newest. */
 const SNAPSHOT = 50;
 /** Missed events sent again after a reconnect; past this a snapshot says it in one message. */
 const REPLAY = 500;
@@ -40,12 +42,12 @@ const PING_MS = 20_000;
 /** A stream that stopped reading is dropped once this much waits for it. */
 const BACKLOG_BYTES = 1 << 20;
 
-/** What a stream or a listing asks for. Neither keys nor party: everything. */
+/** What a stream or a listing asks for. Neither keys nor parties: everything. */
 type Filter = {
   /** The keys asked for, and each transfer's own key once one of them is seen. */
   keys: Set<string> | null;
-  /** An address or account at either end, lowercased. */
-  party: string | null;
+  /** Addresses or accounts, any of them at either end, lowercased. */
+  parties: Set<string> | null;
 };
 
 type Stream = Filter & { res: ServerResponse; ip: string };
@@ -140,15 +142,15 @@ function resolve(deps: Deps, f: Filter): void {
 /** Whether a stream asked for this transfer; a key it asked for marks the transfer's own key as asked too. */
 function wants(s: Filter, event: TransferEvent, written: string[]): boolean {
   const t = event.transfer;
-  if (!s.keys && !s.party) return true;
+  if (!s.keys && !s.parties) return true;
   if (s.keys && (s.keys.has(t.key) || written.some((k) => s.keys!.has(k)))) {
     s.keys.add(t.key);
     return true;
   }
-  return s.party !== null && ofParty(t, s.party);
+  return s.parties !== null && ofParties(t, s.parties);
 }
 
-/** The transfers a filter names, as they stand: the keys', and a party's or everyone's newest. */
+/** The transfers a filter names, as they stand: the keys', and the parties' or everyone's newest. */
 function snapshotOf(deps: Deps, f: Filter): Activity[] {
   const ctx = activityContext(deps);
   const found = new Map<string, Activity>();
@@ -156,23 +158,25 @@ function snapshotOf(deps: Deps, f: Filter): Activity[] {
     const a = activityOf(deps.store, key, ctx);
     if (a) found.set(a.key, a);
   }
-  if (f.keys && !f.party) return [...found.values()].sort(newestFirst);
-  const newest = activities(deps.store, ctx).filter((a) => !found.has(a.key) && (!f.party || ofParty(a, f.party)));
+  if (f.keys && !f.parties) return [...found.values()].sort(newestFirst);
+  const newest = activities(deps.store, ctx).filter((a) => !found.has(a.key) && (!f.parties || ofParties(a, f.parties)));
   return [...found.values(), ...newest].sort(newestFirst).slice(0, Math.max(SNAPSHOT, found.size));
 }
 
-const ofParty = (a: Activity, party: string) =>
-  a.from.address?.toLowerCase() === party || a.to.recipient?.toLowerCase() === party;
+const ofParties = (a: Activity, parties: Set<string>) =>
+  parties.has(a.from.address?.toLowerCase() ?? '') || parties.has(a.to.recipient?.toLowerCase() ?? '');
 
-const asQuery = (f: Filter) => ({ keys: f.keys ? [...f.keys] : undefined, party: f.party ?? undefined });
+const asQuery = (f: Filter) => ({ keys: f.keys ? [...f.keys] : undefined, parties: f.parties ? [...f.parties] : undefined });
 
-/** `key` (repeated) and `party` from a query; a rollback `v:7` is told as its withdrawal `w:7`. */
+/** `key` and `party`, each repeatable, from a query; a rollback `v:7` is told as its withdrawal `w:7`. */
 function filterOf(q: URLSearchParams): Filter {
   const asked = q.getAll('key').filter(Boolean);
   if (asked.length > KEYS) throw new BadRequest(`no more than ${KEYS} keys at once`);
+  const parties = q.getAll('party').map((p) => p.trim().toLowerCase()).filter(Boolean);
+  if (parties.length > PARTIES) throw new BadRequest(`no more than ${PARTIES} parties at once`);
   return {
     keys: asked.length ? new Set(asked.flatMap((k) => (k.startsWith('v:') ? [k, `w:${k.slice(2)}`] : [k]))) : null,
-    party: q.get('party')?.trim().toLowerCase() || null,
+    parties: parties.length ? new Set(parties) : null,
   };
 }
 

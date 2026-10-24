@@ -565,20 +565,21 @@ export class Store {
   }
 
   /**
-   * Events for some transfers, by key, or by an address or account at either
-   * end; for every transfer when neither is given. After `after`, oldest first;
+   * Events for some transfers, by key, or by addresses or accounts at either
+   * end (lowercased); for every transfer when neither is given. After `after`, oldest first;
    * without it, the newest `limit`, still oldest first.
    */
-  events(q: { keys?: string[]; party?: string; after?: number; limit: number }): EventRow[] {
+  events(q: { keys?: string[]; parties?: string[]; after?: number; limit: number }): EventRow[] {
     const which: string[] = [];
     const args: (string | number)[] = [];
     if (q.keys?.length) {
       which.push(`key IN (${q.keys.map(() => '?').join(',')})`);
       args.push(...q.keys);
     }
-    if (q.party) {
-      which.push('sender = ? OR recipient = ?');
-      args.push(q.party, q.party);
+    if (q.parties?.length) {
+      const marks = q.parties.map(() => '?').join(',');
+      which.push(`sender IN (${marks}) OR recipient IN (${marks})`);
+      args.push(...q.parties, ...q.parties);
     }
     const filter = which.length ? `(${which.join(' OR ')})` : '1';
     if (q.after !== undefined) {

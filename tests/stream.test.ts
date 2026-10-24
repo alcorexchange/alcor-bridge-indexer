@@ -191,22 +191,27 @@ test('a key not seen yet is told when it is, and a leg is told as its hop', asyn
   }
 });
 
-test('a party is matched at either end, and no filter is the whole feed', async () => {
+test('parties are matched at either end, any of several, and no filter is the whole feed', async () => {
   const restore = offline();
   const store = new Store(':memory:');
   const { server, base } = await serve(store);
   try {
     deposit(store, 1, 'seen', 'bob');
     await settle();
-    const mine = await open(base, '?party=BOB');
+    // One person, two wallets: a Telos account and an account on another chain.
+    const mine = await open(base, '?party=BOB&party=dave');
     const everything = await open(base, '');
     deposit(store, 2, 'seen', 'carol');
     await settle();
     deposit(store, 3, 'seen', 'bob');
-    assert.deepEqual(await mine.after(2), [['snapshot', ['d:1:1']], ['new', 'd:1:3', 'in_progress']]);
-    assert.deepEqual(await everything.after(3), [
-      ['snapshot', ['d:1:1']], ['new', 'd:1:2', 'in_progress'], ['new', 'd:1:3', 'in_progress'],
+    await settle();
+    deposit(store, 4, 'seen', 'dave');
+    assert.deepEqual(await mine.after(3), [['snapshot', ['d:1:1']], ['new', 'd:1:3', 'in_progress'], ['new', 'd:1:4', 'in_progress']]);
+    assert.deepEqual(await everything.after(4), [
+      ['snapshot', ['d:1:1']], ['new', 'd:1:2', 'in_progress'], ['new', 'd:1:3', 'in_progress'], ['new', 'd:1:4', 'in_progress'],
     ]);
+    const listed = await (await fetch(`${base}/v1/events?party=dave&party=carol`)).json();
+    assert.deepEqual(listed.events.map((e: any) => e.transfer.key), ['d:1:2', 'd:1:4']);
     await Promise.all([mine.close(), everything.close()]);
   } finally {
     server.close();

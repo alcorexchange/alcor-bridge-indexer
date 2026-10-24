@@ -78,7 +78,7 @@ export class EventLog {
   }
 
   /** As stored, for a page catching up or listing; see `Store.events`. */
-  list(q: { keys?: string[]; party?: string; after?: number; limit: number }): TransferEvent[] {
+  list(q: { keys?: string[]; parties?: string[]; after?: number; limit: number }): TransferEvent[] {
     return this.store.events(q).map(served);
   }
 

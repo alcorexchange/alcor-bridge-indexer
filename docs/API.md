@@ -1360,7 +1360,8 @@ feed. `404` with `NOT_FOUND` for a key the indexer has not seen (yet).
 
 ```
 ?key=<key> [&key=<key>…]     some transfers, by any of their keys (up to 50)
-?party=<address or account>  every transfer with it at either end, exactly; case does not matter
+?party=<address or account>  every transfer with any of them at either end, exactly, any case;
+                             repeat for a person's wallets on several chains (up to 10)
 (none)                       every transfer: the public feed
 ```
 
@@ -1409,7 +1410,7 @@ comes instead — the same handler. A client reconnecting by hand passes
 
 - A `key` not seen yet (a deposit just sent) is told as `new` when it is. Any
   key of a transfer works: a hop's leg, the `v:` of a rollback.
-- A snapshot of a party or of everything holds the newest 50.
+- A snapshot of parties or of everything holds the newest 50.
 - A comment line (`: ping`) every 20 seconds keeps proxies from closing it.
 - Nothing here is faster than the indexer: a deposit appears when its chain is
   scanned, as on a poll. What goes away is the poll's own delay.

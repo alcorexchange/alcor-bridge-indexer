@@ -171,13 +171,13 @@ paths:
         proxies from closing an idle stream.
 
         Asking: `key` (repeatable, up to 50) for some transfers by any of their
-        keys — one not seen yet is told when it is; `party` for every transfer
-        with that address or account at either end, exactly, any case; nothing
-        for every transfer. A snapshot of a party or of everything holds the
-        newest 50.
+        keys — one not seen yet is told when it is; `party` (repeatable, up to
+        10: a person's wallets on several chains) for every transfer with any
+        of them at either end, exactly, any case; nothing for every transfer.
+        A snapshot of parties or of everything holds the newest 50.
       parameters:
         - { name: key, in: query, description: 'A transfer, by any of its keys; repeat for several (up to 50).', schema: { type: string } }
-        - { name: party, in: query, description: 'An address or account at either end, exactly; case does not matter.', schema: { type: string } }
+        - { name: party, in: query, description: 'An address or account at either end, exactly, any case; repeat for several (up to 10).', schema: { type: string } }
         - { name: after, in: query, description: 'The last event id had, for a client that reconnects by hand (a browser sends `Last-Event-ID`).', schema: { type: integer } }
         - { name: Last-Event-ID, in: header, schema: { type: integer } }
       responses:
@@ -206,7 +206,7 @@ paths:
         passing back `last` each time. Kept 30 days.
       parameters:
         - { name: key, in: query, description: 'A transfer, by any of its keys; repeatable.', schema: { type: string } }
-        - { name: party, in: query, schema: { type: string } }
+        - { name: party, in: query, description: 'Repeatable, up to 10.', schema: { type: string } }
         - { name: after, in: query, schema: { type: integer, minimum: 0 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
       responses:
