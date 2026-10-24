@@ -449,7 +449,7 @@
    "swap": null,
    "progress": {
     "stage": "waiting: Ethereum is not paying this token out right now",
-    "percent": 50,
+    "percent": 75,
     "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
@@ -800,7 +800,7 @@
    "swap": null,
    "progress": {
     "stage": "waiting: Ethereum is not paying this token out right now",
-    "percent": 50,
+    "percent": 75,
     "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"

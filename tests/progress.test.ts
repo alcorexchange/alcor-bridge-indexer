@@ -72,6 +72,12 @@ test('a withdrawal to Ethereum waits on the user once provable, with no ETA', ()
   assert.deepEqual(p, { stage: 'ready: release it on Ethereum', percent: 50, etaSeconds: null, exact: true, waitingOn: 'user' });
 });
 
+test('a withdrawal with a delivery fee is the courier\'s to release, not the user\'s', () => {
+  const p = transferProgress(row({ direction: 'withdrawal', status: 'provable', fee: '21000' }), ctx);
+  assert.deepEqual(p, { stage: 'the courier releases it on Ethereum', percent: 75, etaSeconds: null, exact: false, waitingOn: 'bridge' });
+  assert.equal(transferProgress(row({ direction: 'withdrawal', status: 'provable', fee: '0' }), ctx).waitingOn, 'user');
+});
+
 test('finished crossings are 100 with nothing waiting', () => {
   for (const [direction, status, stage] of [
     ['deposit', 'credited', 'credited on Telos'],

@@ -158,6 +158,11 @@ function withdrawalProgress(row: TransferRow, chain: string, ctx: ProgressContex
       ? byTime(stage, row.src_time, eta, ctx.now)
       : { stage, percent: 0, etaSeconds: null, exact: false, waitingOn: 'bridge' };
   }
+  // A delivery fee signed with the burn is the courier's to collect: it releases
+  // the withdrawal, and the owner has nothing to send.
+  if (row.status === 'provable' && BigInt(row.fee ?? '0') > 0n) {
+    return { stage: `the courier releases it on ${chain}`, percent: 75, etaSeconds: null, exact: false, waitingOn: 'bridge' };
+  }
   if (row.status === 'provable') {
     return { stage: `ready: release it on ${chain}`, percent: 50, etaSeconds: null, exact: true, waitingOn: 'user' };
   }
