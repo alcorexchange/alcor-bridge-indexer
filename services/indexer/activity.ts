@@ -16,10 +16,10 @@
  */
 
 import { SETTLEMENT_CHAIN } from './config.ts';
-import type { Store, TransferRow, TransferStatus } from './db.ts';
-import { journey } from './hops.ts';
+import { withdrawalKey, type Store, type TransferRow, type TransferStatus } from './db.ts';
+import { journey, journeyOf } from './hops.ts';
 import { transferProgress, type Progress, type ProgressContext } from './progress.ts';
-import { decimalAmount, decimalUnits } from './units.ts';
+import { decimalAmount, decimalUnits } from '../../src/units.ts';
 
 export const STATES = ['in_progress', 'action_needed', 'delivered', 'returned'] as const;
 export type ActivityState = (typeof STATES)[number];
@@ -61,6 +61,10 @@ const RETURNED: TransferStatus[] = ['bounced', 'expired', 'refunded'];
 
 /** Not finished: whose move it is decides between the two open states. */
 const open = (p: Progress): ActivityState => (p.waitingOn === 'user' ? 'action_needed' : 'in_progress');
+
+/** One row's state, as a person reads it: where it ended, or whose move it is. */
+export const stateOf = (row: TransferRow, progress: Progress): ActivityState =>
+  DELIVERED.includes(row.status) ? 'delivered' : RETURNED.includes(row.status) ? 'returned' : open(progress);
 
 /** Newest first; the key breaks a tie, so a cursor always lands in one place. */
 export function newestFirst(a: Activity, b: Activity): number {
@@ -125,7 +129,7 @@ function directActivity(row: TransferRow, ctx: ActivityContext, backOf: (d: Tran
     from: deposit ? { chain: far, address: row.evm_address } : { chain: SETTLEMENT_CHAIN, address: row.account },
     to: deposit ? { chain: SETTLEMENT_CHAIN, recipient: row.account } : { chain: far, recipient: row.evm_address },
     ...priced(row, ctx),
-    state: DELIVERED.includes(row.status) ? 'delivered' : RETURNED.includes(row.status) ? 'returned' : open(progress),
+    state: stateOf(row, progress),
     waitingOn: progress.waitingOn,
     stage: progress.stage,
     startedAt: row.src_time,
@@ -160,6 +164,39 @@ function hopActivity(store: Store, row: TransferRow, ctx: ActivityContext, backO
     srcTx: row.src_tx,
     dstTx: end.tx,
   };
+}
+
+/**
+ * The one transfer any of its keys belongs to: a direct crossing by its row, a
+ * hop by its deposit or any of its legs, a refused deposit by the withdrawal
+ * that sent it back, a rollback (`v:<id>`) by its withdrawal. Undefined for a
+ * key the store does not know, and for a leg no deposit started — the same
+ * rows `activities` leaves out.
+ */
+export function activityOf(store: Store, key: string, ctx: ActivityContext): Activity | undefined {
+  const row = store.getTransfer(key.startsWith('v:') ? withdrawalKey(key.slice(2)) : key);
+  const root = row && transferOf(store, row, ctx);
+  if (!root) return undefined;
+  const backOf = (d: TransferRow) => {
+    const back = d.status === 'bounced' && d.dst_tx ? store.withdrawalsOpenedIn(d.dst_tx)[0] : undefined;
+    return back === undefined ? undefined : store.getTransfer(back);
+  };
+  return root.direction === 'deposit' && ctx.hop !== undefined && root.account === ctx.hop
+    ? hopActivity(store, root, ctx, backOf)
+    : directActivity(root, ctx, backOf);
+}
+
+/** The row a transfer is keyed by, for any of its rows; the rules `activities` folds legs by. */
+function transferOf(store: Store, row: TransferRow, ctx: ActivityContext): TransferRow | undefined {
+  if (row.direction === 'deposit') return row;
+  const refused = row.src_tx ? store.bouncedBy(row.src_tx) : undefined;
+  if (refused) return refused;
+  const hop = store.getHop(row.ref);
+  if (hop) {
+    const deposit = journeyOf(store, hop);
+    return deposit === null ? undefined : store.getTransfer(deposit);
+  }
+  return ctx.hop !== undefined && row.account === ctx.hop ? undefined : row;
 }
 
 // --- the feed ---------------------------------------------------------------------

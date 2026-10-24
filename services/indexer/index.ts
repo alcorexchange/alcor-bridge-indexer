@@ -21,7 +21,7 @@
  * "the tree is four hours behind" is the single most useful thing this can say,
  * and it can only say it while it is still answering.
  *
- *   node --experimental-strip-types services/indexer/index.ts [--check]
+ *   node services/indexer/index.ts [--check]
  */
 
 import { loadConfig, SETTLEMENT_CHAIN } from './config.ts';
@@ -36,7 +36,10 @@ import { followNearVault } from './nearVault.ts';
 import { antelopeVaults, crossingsFiles } from '../../src/chains/antelope.ts';
 import { getTableRows } from '../../src/net/antelope.ts';
 import { backfillFromHistory } from './history.ts';
-import { createApi } from './api.ts';
+import { createApi, type Deps } from './api/index.ts';
+import { activityContext } from './api/context.ts';
+import { EventLog } from './events.ts';
+import { warmListings } from './fast.ts';
 import { applySwapActions, routeOf } from './swaps.ts';
 import { ActionFollower, type HistorySource, type Watch } from './actions.ts';
 
@@ -146,7 +149,16 @@ const histories = historySources.map((source) => new ActionFollower(source, stor
 
 // The API comes up first and stays up. Everything else is allowed to be broken
 // while it reports that it is.
-const api = createApi({ cfg, store, savanna, evms, keepers, histories, startedAt });
+const deps: Deps = {
+  cfg, store, savanna, evms, keepers, histories, startedAt,
+  events: new EventLog(store, () => activityContext(deps)),
+};
+// The listings first: a transfer's asset is part of what the log compares, and a
+// baseline read without them would make every transfer's next write an event.
+await warmListings(cfg).catch((err) => console.log(`[events] listings not read before starting: ${(err as Error).message}`));
+// Listening before any follower writes, so no change goes unrecorded.
+deps.events.start();
+const api = createApi(deps);
 api.listen(cfg.port, cfg.host, () => console.log(`[api] listening on ${cfg.host}:${cfg.port}`));
 
 let stopping = false;
@@ -289,6 +301,8 @@ const shutdown = (signal: string) => {
   for (const keeper of keepers.values()) keeper.stop();
   for (const h of histories) h.stop();
   api.close();
+  // Streams (`/v1/stream`) never end on their own; their pages reconnect to the next process.
+  api.closeAllConnections();
   // The followers write their frontier on the way out; give them a moment, then
   // leave regardless rather than hang a container restart.
   setTimeout(() => {

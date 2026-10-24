@@ -32,7 +32,7 @@ import { ANTELOPE_SWAPS, ROUTE_MEMO } from '../../src/chains/swaps.ts';
 import { nearAddress } from '../../src/near/logs.ts';
 import { fetchJson, HttpError } from '../../src/net/fetchJson.ts';
 import { SETTLEMENT_CHAIN } from './config.ts';
-import { decimalAmount, decimalUnits, parseAsset } from './units.ts';
+import { decimalAmount, decimalUnits, parseAsset } from '../../src/units.ts';
 
 /** A request the front end got wrong, as opposed to a journey that is not possible now: answered 400. */
 export class PlanRefused extends Error {}

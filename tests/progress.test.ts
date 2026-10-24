@@ -33,7 +33,7 @@ const row = (over: Partial<TransferRow>): TransferRow => ({
   key: 'k', direction: 'deposit', ref: 1, status: 'seen', account: 'alice', evm_address: null, token: 'aa',
   symbol: null, amount: '5000000', amount_raw: null, domain: '1', src_block: 1000, src_time: NOW - 60,
   src_tx: null, dst_block: null, dst_time: null, dst_tx: null, deadline: null, proof_at: null,
-  refund_tx: null, memo: null, updated_at: NOW, ...over,
+  refund_tx: null, memo: null, fee: null, updated_at: NOW, ...over,
 });
 
 test('an Ethereum deposit on the fast path is counted in confirmations, as the ledger counts them', () => {

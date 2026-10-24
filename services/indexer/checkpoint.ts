@@ -28,7 +28,7 @@ import { checkpointProof, findCheckpoint, merkleBranch } from '../../src/polygon
 import { execFor, type Exec } from '../../src/evm/exec.ts';
 import type { EvmChain } from '../../src/chains/evm.ts';
 import { bare, fromHex } from '../../src/proof/hex.ts';
-import type { Frozen, LogToFreeze } from './prover.ts';
+import type { Frozen, LogToFreeze } from '../../src/proof/prover.ts';
 
 export type CheckpointProverConfig = {
   /** The chain deposits happen on: Polygon or Amoy. */

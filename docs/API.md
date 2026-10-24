@@ -17,6 +17,21 @@ units, releases and failure modes, in one file meant to be handed to a
 developer or an AI assistant:
 [`/docs/bot`](https://telos.alcor.exchange/api/bridge/docs/bot).
 
+**The contract** is [`/openapi.yaml`](https://telos.alcor.exchange/api/bridge/openapi.yaml)
+(OpenAPI 3.1): every public path, parameter and field there keeps its name and
+meaning; new fields and new values of an open list may appear, so read what you
+know and pass over the rest. `/v1/stats`, `/v1/volume`, `/v1/upkeep`,
+`/v1/finalizer-keys`, `/v1/savanna/branch` and the keepers' `/v1/<chain>` are
+for whoever runs the bridge and may change.
+
+**Two words for where a transfer stands.** `state` — `in_progress`,
+`action_needed`, `delivered`, `returned` — is the stable one, for a program to
+branch on; it is on `/v1/activity` and on every transfer row. `status` is the
+detailed lifecycle below, for people and support, and may gain values.
+
+**To follow transfers**, open [`/v1/stream`](#get-v1stream): a snapshot, then each
+change as an event, and after a drop exactly what was missed.
+
 The rule this is built to: **a front end never constructs a proof and never
 decides which one is cheaper.** It asks what is outstanding, asks for the proof,
 and sends the transaction. Everything about retention windows, merkle branches
@@ -326,7 +341,7 @@ transfer for the user — nothing is signed on Telos and nothing is claimed ther
   canonical units of the token, out of the amount, and goes to whoever releases
   the leg: the courier takes it from `/v1/pending` and releases it, so the user
   needs no wallet or gas on the EVM chain. What to ask is the courier's
-  `GET /api/courier/v1/fees` → `withdrawal` for that chain and token. The
+  `GET /v1/fees` → `withdrawal` for that chain and token. The
   amount less the fee must still be at least the leg's minimum, or the hop is
   refused. The way back carries no fee (`<domain>:<recipient>` only); a leg
   voided over there comes back whole, its fee too. The leg's row on
@@ -905,9 +920,15 @@ have. `limit` defaults to 50, caps at 500. Rows are newest first.
   "src_block": 458605094, "src_time": 1790789587, "src_tx": "5ac0df3b…",
   "dst_block": 491538543, "dst_time": 1790789646, "dst_tx": "b1879643…",
   "deadline": null, "secondsToDeadline": null, "memo": null, "fee": null,
-  "flags": [], "hasProof": false, "track": null
+  "flags": [], "hasProof": false, "track": null,
+  "progress": { "stage": "credited on Telos", "percent": 100, "etaSeconds": null, "exact": true, "waitingOn": null },
+  "state": "delivered"
 }
 ```
+
+`state` is the row's place in the four words `/v1/activity` uses; `status` the
+detailed step. For a hop the row is one leg — the journey's own `state` is on
+`/v1/activity/<deposit key>`.
 
 `fee` is a withdrawal's delivery fee, canonical units out of `amount`, signed
 with the burn. Above zero the courier releases it and the owner has nothing to
@@ -1326,6 +1347,94 @@ that sends a refused deposit back are never items of their own.
 
 Shared for 15 seconds (`cache-control: public, max-age=15`).
 
+### `GET /v1/activity/<key>`
+
+One transfer, as `/v1/activity` lists it, by **any** of its keys: a direct
+crossing's key, a hop's deposit key or any of its legs' (`w:<id>`), the
+withdrawal that sent a refused deposit back, a rollback's `v:<id>`. The item is
+keyed by the transfer whichever key was asked — `/v1/activity/w:118` answers
+`"key": "d:1:42"` for the hop that leg belongs to. Read now, not from the shared
+feed. `404` with `NOT_FOUND` for a key the indexer has not seen (yet).
+
+### `GET /v1/stream`
+
+```
+?key=<key> [&key=<key>…]     some transfers, by any of their keys (up to 50)
+?party=<address or account>  every transfer with it at either end, exactly; case does not matter
+(none)                       every transfer: the public feed
+```
+
+The transfers asked for, then each change to them as the bridge sees it, over
+[server-sent events](https://developer.mozilla.org/docs/Web/API/Server-sent_events).
+A page needs two handlers and keeps no bookkeeping of its own:
+
+```js
+const url = 'https://telos.alcor.exchange/api/bridge/v1/stream?party=' + encodeURIComponent(account);
+const stream = new EventSource(url);
+
+// The list as it stands. On opening, and whenever a replay would not be whole.
+stream.addEventListener('snapshot', (e) => {
+  const { transfers } = JSON.parse(e.data);
+  setList(transfers);                       // replace
+});
+
+// One change. Put it in the list by its key; tell the user when it matters.
+stream.addEventListener('transfer', (e) => {
+  const { change, transfer, previous } = JSON.parse(e.data);
+  upsert(transfer);                         // by transfer.key
+  if (change !== 'progress') notify(change, transfer);
+});
+```
+
+`transfer` is a transfer exactly as `/v1/activity/<key>` shows it. `change`
+says what happened, in one word:
+
+| `change` | |
+|---|---|
+| `new` | the bridge has just seen it — a deposit's log, a burn on Telos |
+| `action_needed` | the next step became the user's: a release to sign on an EVM chain |
+| `delivered` | at the recipient |
+| `returned` | given back, or on its way back |
+| `progress` | anything else: a stage, a transaction, back in the bridge's hands |
+
+`previous` is `{ state, stage }` as it was, null for `new`. A write that changes
+nothing a person sees — the indexer reading a chain again — sends nothing.
+
+**Drops are the server's problem.** Every message has an `id`. `EventSource`
+reconnects by itself and sends the last one it had (`Last-Event-ID`); the events
+since are sent again, in order, and the page never notices. Away longer than
+events are kept (30 days) or for more than 500 of them, a fresh `snapshot`
+comes instead — the same handler. A client reconnecting by hand passes
+`?after=<id>`.
+
+- A `key` not seen yet (a deposit just sent) is told as `new` when it is. Any
+  key of a transfer works: a hop's leg, the `v:` of a rollback.
+- A snapshot of a party or of everything holds the newest 50.
+- A comment line (`: ping`) every 20 seconds keeps proxies from closing it.
+- Nothing here is faster than the indexer: a deposit appears when its chain is
+  scanned, as on a poll. What goes away is the poll's own delay.
+- Up to 10 streams from one address; more is `429` with `RATE_LIMITED`.
+- What moves with the clock and not with a write — `progress.percent` while
+  confirmations accrue — is read when wanted, from `/v1/transfers/<key>`.
+
+### `GET /v1/events`
+
+```
+?key= &party= &after= &limit=     (limit 1–100, default 10)
+```
+
+The same events, listed, oldest first: without `after` the newest `limit` (a
+notification panel), with it the ones after (polling instead of streaming —
+pass back `last` each time). Kept 30 days.
+
+```json
+{ "events": [
+  { "id": 4182, "at": 1791210300, "change": "delivered",
+    "transfer": { "key": "d:1:42", "kind": "hop", "state": "delivered", "stage": "delivered on WAX", … },
+    "previous": { "state": "in_progress", "stage": "on its way to WAX" } } ],
+  "last": 4182 }
+```
+
 ### `GET /v1/activity/summary`
 
 ```
@@ -1500,6 +1609,18 @@ On an instance with NEAR each also has `nearCalls`: `submit_root` and
 shape of `/v1/proofs` above.
 
 ---
+
+### Deposit addresses and fees: the courier
+
+Served by the courier, beside the indexer under the same base URL (and at
+`/api/courier/…` as before). Same error shape; the courier adds `RATE_LIMITED`
+for too many new addresses from one client.
+
+| | |
+|---|---|
+| `POST /v1/deposit-addresses` | `{ "chain": "telos" \| "<chain id>", "to": "<recipient>" }` → the address on every EVM chain that forwards what arrives to that destination. The same request always answers the same. |
+| `GET /v1/deposit-addresses/<0x…>` | its destination, holds per chain, and its last forwards |
+| `GET /v1/fees` | what a forward and a delivered withdrawal cost now, per chain and token |
 
 ## Sending the transaction
 
@@ -1686,7 +1807,8 @@ and USDC.e that must both exist are two assets.
 
 ## Polling
 
-`/v1/pending` and `/v1/transfers` every 10–15 seconds is plenty: Telos blocks
+A page following its own transfers is better off on `/v1/stream`: one request,
+told each change, caught up after a drop. Otherwise `/v1/pending` and `/v1/transfers` every 10–15 seconds is plenty: Telos blocks
 are half a second but a crossing changes state on the order of minutes. Nothing
 there is cached, so a tighter loop only costs you requests. The public
 aggregates are: `/v1/activity` for 15 seconds, its summary for 30,
@@ -1702,9 +1824,24 @@ already have and let the next poll move the row.
 |---|---|
 | `400` | a parameter out of range: `limit`, `state`, `period`, a `cursor` this API did not hand out |
 | `404` | unknown route, unknown transfer, or no proof available yet — for a deposit that means the fast path is not on offer *and* nothing is frozen, and `fastUnavailable` says why |
+| `405` | anything but `GET` (and `OPTIONS`, a browser's preflight) |
+| `429` | too many streams from one address |
 | `500` | something the indexer could not do; `error` says what |
+| `502` | a chain or service the answer needed did not answer (a plan, a quote) |
 
-All carry `{"error": "…"}` written to be shown to a person.
+All carry `{"error": "…", "code": "…"}`: `error` written to be shown to a
+person, which may change, and `code` for a program to branch on, which only
+gains values:
+
+| `code` | |
+|---|---|
+| `INVALID_REQUEST` | a parameter out of range or malformed; a plan or quote refused as asked |
+| `NOT_FOUND` | no such route, transfer, deposit or block |
+| `PROOF_NOT_READY` | the transfer exists, its proof does not yet — usually "not yet", with its `status` |
+| `METHOD_NOT_ALLOWED` | not `GET` |
+| `RATE_LIMITED` | too many at once from one address |
+| `UPSTREAM_ERROR` | a chain or service did not answer; worth retrying |
+| `INTERNAL_ERROR` | something this instance could not do |
 
 A `404` on a proof is not a failure state — it is usually "not yet". Use the
 transfer's `status` and `flags` to say which.

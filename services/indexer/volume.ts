@@ -11,7 +11,7 @@
  * are the Telos accounts, `addresses` the far side's — an EVM address or an
  * Antelope account. Amounts are never added across tokens; the totals are counts.
  */
-import { humanAmount } from './units.ts';
+import { humanAmount } from '../../src/units.ts';
 import { DAY, PERIODS } from './activity.ts';
 import type { Direction, Store, VolumeRow } from './db.ts';
 

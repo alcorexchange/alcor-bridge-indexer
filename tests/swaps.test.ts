@@ -83,7 +83,7 @@ test('a swap on Telos delivered to another chain names the withdrawal that carri
   applySwapActions(store, 'telos', [closed(6, 'exec6', 'swapped', [{ quantity: '99.700000 USDT', contract: 'wrap.alcor' }], BSC)]);
   assert.deepEqual(swapOfPayout(store, 'forward6')!.onward, [], 'the withdrawal not read yet');
   store.upsertTransfer({
-    key: 'w:300', direction: 'withdrawal', ref: 300, status: 'open', account: 'hop.alcor',
+    key: 'w:300', direction: 'withdrawal', ref: 300, status: 'burned', account: 'hop.alcor',
     evm_address: '0x5b38da6a701c568545dcfcb03fcb875f56beddc4', domain: '56', amount: '99700000',
     src_block: 10, src_time: 1000, src_tx: 'exec6',
   });

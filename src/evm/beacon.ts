@@ -88,8 +88,9 @@ export class BeaconClient {
 
   async genesisValidatorsRoot(): Promise<string> {
     if (genesisRootCache) return genesisRootCache;
-    genesisRootCache = (await this.get('/eth/v1/beacon/genesis')).data.genesis_validators_root;
-    return genesisRootCache;
+    const root: string = (await this.get('/eth/v1/beacon/genesis')).data.genesis_validators_root;
+    genesisRootCache = root;
+    return root;
   }
 
   async forkSchedule(): Promise<Fork[]> {

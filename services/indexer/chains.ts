@@ -31,7 +31,7 @@ import { nearRpc } from '../../src/near/rpc.ts';
 import { nearRouteOf } from './nearVault.ts';
 import { outflowLeftNow, vaultState } from '../../src/sui/client.ts';
 import { suiGraphql } from '../../src/sui/proof.ts';
-import { epochBacklog } from './parlia.ts';
+import { epochBacklog } from '../../src/bsc/parlia.ts';
 import { trustedSet } from '../../src/polygon/proof.ts';
 import { comet, heimdallOf, latestHeight } from '../../src/polygon/heimdall.ts';
 import { periodAt } from '../../src/evm/beacon.ts';
@@ -215,13 +215,15 @@ const UNLIMITED_OUTFLOW = (1n << 256n) - 1n;
  * `withdrawableNow`: unknown is not the same as unlimited.
  */
 async function withOutflow<
-  R extends { token: string; scale: string; available: string | null; maxWithdrawal: string },
+  R extends { token: string | null; scale: string; available: string | null; maxWithdrawal: string },
 >(exec: Exec, vault: string, routes: R[]) {
   const NATIVE = '0x' + '0'.repeat(40);
   return Promise.all(
     routes.map(async (r) => {
       try {
-        const arg = r.token.slice(2).toLowerCase().padStart(64, '0');
+        const token = r.token;
+        if (token === null) throw new Error('a route on an EVM vault names no ERC-20');
+        const arg = token.slice(2).toLowerCase().padStart(64, '0');
         const vaultArg = vault.slice(2).toLowerCase().padStart(64, '0');
         const scale = BigInt(r.scale);
         const word = (hex: string, i: number) => BigInt('0x' + String(hex).slice(2 + i * 64, 2 + (i + 1) * 64));
@@ -230,9 +232,9 @@ async function withOutflow<
           exec.rpc('eth_call', [{ to: vault, data: selector('limits(address)') + arg }, 'latest']),
           exec.rpc('eth_call', [{ to: vault, data: selector('assets(address)') + arg }, 'latest']),
           // What the vault holds is its balance, which is what the cap is checked against.
-          r.token.toLowerCase() === NATIVE
+          token.toLowerCase() === NATIVE
             ? exec.rpc('eth_getBalance', [vault, 'latest'])
-            : exec.rpc('eth_call', [{ to: r.token, data: selector('balanceOf(address)') + vaultArg }, 'latest']),
+            : exec.rpc('eth_call', [{ to: token, data: selector('balanceOf(address)') + vaultArg }, 'latest']),
         ]);
         const raw = BigInt(available);
         const left = raw === UNLIMITED_OUTFLOW ? null : raw / scale;

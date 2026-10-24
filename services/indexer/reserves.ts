@@ -10,7 +10,7 @@
  * the bridge.
  */
 
-import { decimalAmount, decimalUnits } from './units.ts';
+import { decimalAmount, decimalUnits } from '../../src/units.ts';
 
 /** A chain as `/v1/chains` lists it, the fields read here. */
 type Source = {

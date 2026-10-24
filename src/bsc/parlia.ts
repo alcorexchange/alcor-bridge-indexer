@@ -13,14 +13,14 @@
  * names the epoch it verifies under, and the light client keeps a set for a week.
  */
 
-import { antelopeRpc } from '../../src/net/antelope.ts';
-import { proveReceipt } from '../../src/evm/receiptProof.ts';
-import { activeExec, type Exec } from '../../src/evm/exec.ts';
-import { jsonRpcAny } from '../../src/net/fetchJson.ts';
-import { hexToBytes } from '../../src/bsc/header.ts';
-import { proverootArgs } from '../../src/bsc/proof.ts';
-import { bare } from '../../src/proof/hex.ts';
-import type { Frozen, LogToFreeze } from './prover.ts';
+import { antelopeRpc } from '../net/antelope.ts';
+import { proveReceipt } from '../evm/receiptProof.ts';
+import { activeExec, type Exec } from '../evm/exec.ts';
+import { jsonRpcAny } from '../net/fetchJson.ts';
+import { hexToBytes } from './header.ts';
+import { proverootArgs } from './proof.ts';
+import { bare } from '../proof/hex.ts';
+import type { Frozen, LogToFreeze } from '../proof/prover.ts';
 /**
  * What building a Parlia proof actually needs.
  *

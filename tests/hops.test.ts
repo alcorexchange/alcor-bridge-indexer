@@ -324,7 +324,7 @@ test('routes: open flags with nothing left under the bound are closed, saying wh
 });
 
 test('routes: a full spoke closes the way out, and an empty one the way home', () => {
-  const spoke = (over: object) => ({ ...wax, routes: [wax.routes[0] && { ...wax.routes[0], kind: 'spoke', ...over }] });
+  const spoke = (over: object) => ({ ...wax, routes: [{ ...wax.routes[0]!, kind: 'spoke' as const, ...over }] });
   const full = routesBetween([eth, spoke({ available: '0', withdrawableNow: '0', depositableNow: '50000000000' })], telos, { account: HOP, deployed: true }) as any[];
   const out = full.find((r) => r.from === 'telos-production' && r.to === 'wax');
   assert.deepEqual([out.open, out.reason], [false, 'the USDC mirror on WAX is at its cap']);

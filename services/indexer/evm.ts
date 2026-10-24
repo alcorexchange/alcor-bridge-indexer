@@ -27,8 +27,6 @@
  * followed as carefully as the money.
  */
 
-import { keccak_256 } from '@noble/hashes/sha3.js';
-
 import type { IndexerConfig, Source } from './config.ts';
 import { BOOKED, Store, depositKey, voidKey, withdrawalKey } from './db.ts';
 
@@ -36,30 +34,16 @@ import { BeaconClient } from '../../src/evm/beacon.ts';
 import { updateFromBlocks, slotForTimestamp, ancestryOfLength } from '../../src/evm/fromBlocks.ts';
 import { buildProofBundle } from '../../src/evm/proofBundle.ts';
 import { CheckpointProver } from './checkpoint.ts';
-import { ParliaProver } from './parlia.ts';
+import { ParliaProver } from '../../src/bsc/parlia.ts';
 import { MilestoneProver } from './milestone.ts';
-import type { Frozen, LogToFreeze, Prover } from './prover.ts';
+import type { Frozen, LogToFreeze, Prover } from '../../src/proof/prover.ts';
 import { execFor, selector, type Exec } from '../../src/evm/exec.ts';
-import { evmChain, type EvmChain } from '../../src/chains/evm.ts';
+import { evmChain, TOPICS, type EvmChain } from '../../src/chains/evm.ts';
 import { proverootArgs, creditArgs } from '../../src/proofs.ts';
-import { DEPOSIT_TOPIC } from '../../src/chains/evm.ts';
 import { uint64ToName } from '../../src/proof/pack.ts';
-import { toHex0x } from '../../src/proof/hex.ts';
 
 /** Seconds a Polygon deposit waits on the milestone path before the checkpoint path is tried. */
 const MILESTONE_FALLBACK_AFTER = Number(process.env.MILESTONE_FALLBACK_AFTER ?? 1800);
-
-const topicOf = (signature: string): string => toHex0x(keccak_256(new TextEncoder().encode(signature)));
-
-export const TOPICS = {
-  deposit: DEPOSIT_TOPIC,
-  // The vault's, which names the courier's fee; the withdrawals contract emits
-  // the four-field one, and only the vault's is listened to.
-  released: topicOf('Released(uint64,address,address,uint256,address,uint256)'),
-  voided: topicOf('Voided(uint64)'),
-  expired: topicOf('Expired(uint64)'),
-  rootAccepted: topicOf('RootAccepted(bytes32,bytes32,uint32)'),
-};
 
 /** Logs per request. Public nodes refuse wide ranges, and refuse them differently. */
 const LOG_SPAN = 2_000;

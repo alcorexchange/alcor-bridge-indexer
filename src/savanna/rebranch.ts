@@ -19,14 +19,14 @@
  * tree branch and the root it names change.
  */
 
-import { finalityLeafBytes } from '../../src/savanna/tree.ts';
-import { toSolidityBranch } from '../../src/savanna/withdrawalProof.ts';
-import { foldProof } from '../../src/proof/merkle.ts';
-import { newestCheckpointAtOrBefore } from '../../src/savanna/frontier.ts';
-import type { IncrementalTree } from '../../src/proof/merkle.ts';
-import type { SavannaChain } from '../../src/chains/savanna.ts';
-import type { WithdrawalArtifact } from '../../src/savanna/withdrawalArtifact.ts';
-import { bare, toHex } from '../../src/proof/hex.ts';
+import { finalityLeafBytes } from './tree.ts';
+import { toSolidityBranch } from './withdrawalProof.ts';
+import { foldProof } from '../proof/merkle.ts';
+import { newestCheckpointAtOrBefore } from './frontier.ts';
+import type { IncrementalTree } from '../proof/merkle.ts';
+import type { SavannaChain } from '../chains/savanna.ts';
+import type { WithdrawalArtifact } from './withdrawalArtifact.ts';
+import { bare, toHex } from '../proof/hex.ts';
 import type { LeafStore } from './leaves.ts';
 
 export type LocalTree = {

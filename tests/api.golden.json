@@ -45,7 +45,8 @@
     "etaSeconds": 89,
     "exact": true,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/d%3A1%3A2": {
@@ -94,7 +95,8 @@
     "etaSeconds": 5,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/d%3A1%3A3": {
@@ -143,7 +145,8 @@
     "etaSeconds": 930,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/d%3A137%3A4": {
@@ -192,7 +195,8 @@
     "etaSeconds": 5,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/d%3A56%3A5": {
@@ -241,7 +245,8 @@
     "etaSeconds": 5,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/d%3A137%3A6": {
@@ -290,7 +295,8 @@
     "etaSeconds": 5,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/w%3A7": {
@@ -343,7 +349,8 @@
     "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "returned"
   }
  },
  "/v1/transfers/w%3A8": {
@@ -394,7 +401,8 @@
     "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/w%3A9": {
@@ -445,7 +453,8 @@
     "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/w%3A10": {
@@ -490,7 +499,8 @@
     "etaSeconds": 5,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/d%3A1181148696416462999%3A12": {
@@ -539,7 +549,8 @@
     "etaSeconds": 5,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/w%3A13": {
@@ -588,7 +599,8 @@
     "etaSeconds": 47,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/d%3A1%3A14": {
@@ -637,7 +649,8 @@
     "etaSeconds": null,
     "exact": true,
     "waitingOn": null
-   }
+   },
+   "state": "delivered"
   }
  },
  "/v1/transfers/d%3A56%3A15": {
@@ -686,7 +699,8 @@
     "etaSeconds": 5,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/w%3A16": {
@@ -737,7 +751,8 @@
     "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/w%3A17": {
@@ -789,13 +804,15 @@
     "etaSeconds": null,
     "exact": false,
     "waitingOn": "bridge"
-   }
+   },
+   "state": "in_progress"
   }
  },
  "/v1/transfers/nope": {
   "status": 404,
   "body": {
-   "error": "no such transfer"
+   "error": "no such transfer",
+   "code": "NOT_FOUND"
   }
  },
  "/v1/pending": {
@@ -1051,6 +1068,7 @@
   "status": 404,
   "body": {
    "error": "no proof available yet",
+   "code": "PROOF_NOT_READY",
    "status": "seen",
    "fastUnavailable": "5 of 12 confirmations; about 84 s more"
   }
@@ -1059,6 +1077,7 @@
   "status": 404,
   "body": {
    "error": "no proof available yet",
+   "code": "PROOF_NOT_READY",
    "status": "seen",
    "fastUnavailable": "amount is above what this route credits on an unfinalized proof (5000000 > 1000000)"
   }
@@ -1227,6 +1246,7 @@
   "status": 404,
   "body": {
    "error": "no proof available yet",
+   "code": "PROOF_NOT_READY",
    "status": "provable",
    "reason": "pol.lc.alcor holds no validator set; bootstrap it"
   }
@@ -1387,13 +1407,15 @@
  "/v1/proofs/w%3A11": {
   "status": 404,
   "body": {
-   "error": "no such transfer"
+   "error": "no such transfer",
+   "code": "NOT_FOUND"
   }
  },
  "/v1/proofs/d%3A1181148696416462999%3A12": {
   "status": 404,
   "body": {
    "error": "no proof available yet",
+   "code": "PROOF_NOT_READY",
    "status": "seen",
    "fastUnavailable": "WAX deposits are proved by its relayer; there is no fast track to offer"
   }
@@ -1401,7 +1423,8 @@
  "/v1/proofs/nope": {
   "status": 404,
   "body": {
-   "error": "no such transfer"
+   "error": "no such transfer",
+   "code": "NOT_FOUND"
   }
  },
  "/v1/chains": {
@@ -2139,6 +2162,108 @@
     "leafBytes": 0
    },
    "incidents": []
+  }
+ },
+ "/v1/activity/d%3A1%3A14": {
+  "status": 200,
+  "body": {
+   "key": "d:1:14",
+   "kind": "direct",
+   "from": {
+    "chain": "mainnet",
+    "address": "0xabc"
+   },
+   "to": {
+    "chain": "telos",
+    "recipient": "alice"
+   },
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8
+   },
+   "amount": "0.005",
+   "state": "delivered",
+   "waitingOn": null,
+   "stage": "credited on Telos",
+   "startedAt": 1799999940,
+   "finishedAt": 1799999970,
+   "srcTx": "0xt",
+   "dstTx": "cafe"
+  }
+ },
+ "/v1/activity/w%3A9": {
+  "status": 200,
+  "body": {
+   "key": "w:9",
+   "kind": "direct",
+   "from": {
+    "chain": "telos",
+    "address": "alice"
+   },
+   "to": {
+    "chain": "mainnet",
+    "recipient": "0xabc"
+   },
+   "asset": {
+    "symbol": "ETH",
+    "precision": 8
+   },
+   "amount": "0.03",
+   "state": "in_progress",
+   "waitingOn": "bridge",
+   "stage": "waiting: Ethereum is not paying this token out right now",
+   "startedAt": 1799999940,
+   "finishedAt": null,
+   "srcTx": "0xburn",
+   "dstTx": null
+  }
+ },
+ "/v1/activity/v%3A7": {
+  "status": 200,
+  "body": {
+   "key": "w:7",
+   "kind": "direct",
+   "from": {
+    "chain": "telos",
+    "address": "alice"
+   },
+   "to": {
+    "chain": "bsc",
+    "recipient": "0xabc"
+   },
+   "asset": {
+    "symbol": "BNB",
+    "precision": 8
+   },
+   "amount": "0.03",
+   "state": "returned",
+   "waitingOn": "bridge",
+   "stage": "expired unpaid on BNB Smart Chain; refunding on Telos",
+   "startedAt": 1799999940,
+   "finishedAt": null,
+   "srcTx": "0xburn",
+   "dstTx": null
+  }
+ },
+ "/v1/activity/nope": {
+  "status": 404,
+  "body": {
+   "error": "no such transfer",
+   "code": "NOT_FOUND"
+  }
+ },
+ "/v1/activity?limit=200": {
+  "status": 400,
+  "body": {
+   "error": "limit is a whole number from 1 to 100",
+   "code": "INVALID_REQUEST"
+  }
+ },
+ "/v1/nope": {
+  "status": 404,
+  "body": {
+   "error": "no route for /v1/nope",
+   "code": "NOT_FOUND"
   }
  }
 }

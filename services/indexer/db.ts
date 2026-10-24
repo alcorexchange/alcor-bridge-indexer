@@ -251,8 +251,23 @@ export function externalToken(domain: number | string, ext: string): string {
   return evmDomain(domain) === undefined ? hex : `0x${hex}`;
 }
 
+/** One change to a transfer, as stored; `body` is the event as served, JSON. */
+export type EventRow = {
+  id: number;
+  /** The transfer's key, as /v1/activity keys it. */
+  key: string;
+  at: number;
+  change: string;
+  /** Either end, lowercased, for finding a party's events. */
+  sender: string | null;
+  recipient: string | null;
+  body: string;
+};
+
 export class Store {
   readonly db: DatabaseSync;
+  /** Told the key of every transfer written (`onChange`). */
+  private readonly listeners = new Set<(key: string) => void>();
 
   constructor(file: string) {
     mkdirSync(dirname(file), { recursive: true });
@@ -475,6 +490,29 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS actions_by_name ON actions (chain, name, time);
 
+      -- Each transfer as /v1/activity last showed it, by its key: what a write is
+      -- compared with to tell a change from a rewrite (events.ts).
+      CREATE TABLE IF NOT EXISTS readings (
+        key     TEXT PRIMARY KEY,
+        reading TEXT NOT NULL
+      );
+
+      -- Every change to a transfer a person would see, numbered: what /v1/stream
+      -- sends and replays after a reconnect, and /v1/events lists. Thirty days.
+      CREATE TABLE IF NOT EXISTS events (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        key       TEXT    NOT NULL,
+        at        INTEGER NOT NULL,
+        change    TEXT    NOT NULL,
+        sender    TEXT,
+        recipient TEXT,
+        body      TEXT    NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS events_by_key ON events (key, id);
+      CREATE INDEX IF NOT EXISTS events_by_sender ON events (sender, id);
+      CREATE INDEX IF NOT EXISTS events_by_recipient ON events (recipient, id);
+      CREATE INDEX IF NOT EXISTS events_by_time ON events (at);
+
       -- Anything an operator would want to find afterwards: a stream gap, a
       -- freeze that failed, a reconnect. Small and capped.
       CREATE TABLE IF NOT EXISTS incidents (
@@ -484,6 +522,87 @@ export class Store {
         detail TEXT    NOT NULL
       );
     `);
+  }
+
+  // --- events -------------------------------------------------------------------
+
+  reading(key: string): string | undefined {
+    return (this.db.prepare('SELECT reading FROM readings WHERE key = ?').get(key) as { reading: string } | undefined)?.reading;
+  }
+
+  hasReadings(): boolean {
+    return this.db.prepare('SELECT 1 FROM readings LIMIT 1').get() !== undefined;
+  }
+
+  /** Every reading at once, in one transaction: the baseline a new log starts from. */
+  putReadings(readings: [key: string, reading: string][]): void {
+    const put = this.db.prepare('INSERT INTO readings (key, reading) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET reading = excluded.reading');
+    this.db.exec('BEGIN');
+    try {
+      for (const [key, reading] of readings) put.run(key, reading);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  /** A change, and the reading it leaves: written together, so neither is ever without the other. */
+  appendEvent(e: Omit<EventRow, 'id'>, reading: string): number {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('INSERT INTO readings (key, reading) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET reading = excluded.reading')
+        .run(e.key, reading);
+      const { lastInsertRowid } = this.db
+        .prepare('INSERT INTO events (key, at, change, sender, recipient, body) VALUES (?,?,?,?,?,?)')
+        .run(e.key, e.at, e.change, e.sender, e.recipient, e.body);
+      this.db.exec('COMMIT');
+      return Number(lastInsertRowid);
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  /**
+   * Events for some transfers, by key, or by an address or account at either
+   * end; for every transfer when neither is given. After `after`, oldest first;
+   * without it, the newest `limit`, still oldest first.
+   */
+  events(q: { keys?: string[]; party?: string; after?: number; limit: number }): EventRow[] {
+    const which: string[] = [];
+    const args: (string | number)[] = [];
+    if (q.keys?.length) {
+      which.push(`key IN (${q.keys.map(() => '?').join(',')})`);
+      args.push(...q.keys);
+    }
+    if (q.party) {
+      which.push('sender = ? OR recipient = ?');
+      args.push(q.party, q.party);
+    }
+    const filter = which.length ? `(${which.join(' OR ')})` : '1';
+    if (q.after !== undefined) {
+      return this.db
+        .prepare(`SELECT * FROM events WHERE ${filter} AND id > ? ORDER BY id LIMIT ?`)
+        .all(...args, q.after, q.limit) as EventRow[];
+    }
+    return (this.db
+      .prepare(`SELECT * FROM events WHERE ${filter} ORDER BY id DESC LIMIT ?`)
+      .all(...args, q.limit) as EventRow[]).reverse();
+  }
+
+  /** The newest event's id; 0 before the first. */
+  lastEventId(): number {
+    return (this.db.prepare('SELECT MAX(id) AS id FROM events').get() as { id: number | null }).id ?? 0;
+  }
+
+  /** The oldest event still kept; undefined when none is. */
+  oldestEventId(): number | undefined {
+    return (this.db.prepare('SELECT MIN(id) AS id FROM events').get() as { id: number | null }).id ?? undefined;
+  }
+
+  pruneEvents(before: number): void {
+    this.db.prepare('DELETE FROM events WHERE at < ?').run(before);
   }
 
   // --- meta ---------------------------------------------------------------------
@@ -521,6 +640,21 @@ export class Store {
    * own. A write that creates a row and says neither is refused: the row would
    * have no place in any history.
    */
+  /**
+   * Be told each transfer written, by key: a row's own, or for a hop the
+   * deposit it carries on (its withdrawal's key when no deposit started it).
+   * Every write, changed or not; telling a change from a rewrite is the
+   * listener's. Returns what stops it.
+   */
+  onChange(listener: (key: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private changed(key: string): void {
+    for (const listener of this.listeners) listener(key);
+  }
+
   upsertTransfer(row: TransferWrite): void {
     const now = Math.floor(Date.now() / 1000);
     const { firstSeen, ...fields } = row;
@@ -568,6 +702,7 @@ export class Store {
         merged.dst_time, merged.dst_tx, merged.deadline, merged.proof_at, merged.refund_tx,
         merged.memo, merged.fee, merged.updated_at,
       );
+    this.changed(merged.key);
   }
 
   getTransfer(key: string): TransferRow | undefined {
@@ -778,6 +913,13 @@ export class Store {
         r.tx, r.at, r.at);
   }
 
+  /** The deposit a transaction on Telos refused: it opened the withdrawal that sends it back. */
+  bouncedBy(tx: string): TransferRow | undefined {
+    return this.db
+      .prepare(`SELECT * FROM transfers WHERE direction = 'deposit' AND status = 'bounced' AND dst_tx = ?`)
+      .get(tx) as TransferRow | undefined;
+  }
+
   /** The withdrawals a transaction on Telos opened, by key: what a swap delivered to another chain. */
   withdrawalsOpenedIn(tx: string): string[] {
     return (this.db
@@ -827,6 +969,7 @@ export class Store {
       )
       .run(h.id, h.prev, h.deposit, h.quantity, h.to_domain, h.to_recipient, h.back_domain,
         h.back_recipient, h.tx, h.block, h.at);
+    this.changed(h.deposit ?? withdrawalKey(h.id));
   }
 
   getHop(id: number): HopRow | undefined {

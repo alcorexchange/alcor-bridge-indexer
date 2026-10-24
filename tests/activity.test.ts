@@ -5,10 +5,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { activities, feed, summary, type ActivityContext } from '../services/indexer/activity.ts';
+import { activities, activityOf, feed, summary, type ActivityContext } from '../services/indexer/activity.ts';
 import { Store, depositKey, withdrawalKey } from '../services/indexer/db.ts';
 import type { ProgressContext } from '../services/indexer/progress.ts';
-import { decimalAmount, decimalUnits } from '../services/indexer/units.ts';
+import { decimalAmount, decimalUnits } from '../src/units.ts';
 import { antelopeDepositEta, antelopeWithdrawalEta } from '../src/chains/eta.ts';
 import { antelopeById } from '../src/chains/antelope.ts';
 
@@ -140,6 +140,39 @@ test('a refused deposit and the withdrawal sending it back are one returned tran
   const all = activities(store, ctx);
   assert.equal(all.length, 1);
   assert.deepEqual([all[0].key, all[0].state, all[0].finishedAt, all[0].dstTx], ['d:1:4', 'returned', NOW - 1000, '0xrefund']);
+});
+
+test('any key of a transfer finds that transfer, as the feed shows it', () => {
+  const store = new Store(':memory:');
+  const hop = hopEthToWax(store, NOW - 600, 'burned');
+  store.upsertTransfer({
+    key: depositKey(1, 4), direction: 'deposit', ref: 4, status: 'bounced', account: 'nobody', evm_address: USER,
+    token: USDC_ETH, domain: '1', amount: '5000000', src_block: 1, src_time: NOW - 5000, dst_tx: 'tback',
+  });
+  store.upsertTransfer({
+    key: withdrawalKey(9), direction: 'withdrawal', ref: 9, status: 'expired', account: 'bridge.alcor', evm_address: USER,
+    token: USDC_ETH, domain: '1', amount: '5000000', src_block: 5, src_time: NOW - 3600, src_tx: 'tback',
+  });
+  store.upsertTransfer({
+    key: withdrawalKey(2), direction: 'withdrawal', ref: 2, status: 'provable', account: 'bob', evm_address: USER,
+    token: USDC_ETH, domain: '1', amount: '1500000', src_block: 2, src_time: NOW - 10,
+  });
+  // A leg of the hop account with no journey behind it: left out of the feed, and so here.
+  store.upsertTransfer({
+    key: withdrawalKey(11), direction: 'withdrawal', ref: 11, status: 'burned', account: HOP, evm_address: USER,
+    token: USDC_ETH, domain: '1', amount: '1000000', src_block: 3, src_time: NOW - 20,
+  });
+
+  const byKey = new Map(activities(store, ctx).map((a) => [a.key, a]));
+  const cases: [string, string | undefined][] = [
+    [hop, hop], [withdrawalKey(7), hop],
+    ['d:1:4', 'd:1:4'], [withdrawalKey(9), 'd:1:4'], ['v:9', 'd:1:4'],
+    [withdrawalKey(2), 'w:2'],
+    [withdrawalKey(11), undefined], ['w:404', undefined],
+  ];
+  for (const [key, owner] of cases) {
+    assert.deepEqual(activityOf(store, key, ctx), owner === undefined ? undefined : byKey.get(owner), key);
+  }
 });
 
 test('the summary counts a hop once, by its ends, and moves no total for what came back', () => {

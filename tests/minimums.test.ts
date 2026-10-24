@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { minimumAlarms, unchecked } from '../services/indexer/minimums.ts';
+import { minimumAlarms, unchecked } from '../src/minimums.ts';
 
 const eth = (vaultMinDeposit: string, minDeposit = '10000') => ({
   id: 'mainnet', name: 'Ethereum', chainId: 1,

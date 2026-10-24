@@ -368,8 +368,8 @@ export function fetchStatus(url: string, timeoutMs = 15_000): Promise<ShipStatus
   });
 }
 
-export async function fetchFinalityData(url: string, blockNum: number): Promise<ShipBlock> {
+export async function fetchFinalityData(url: string, blockNum: number): Promise<ShipBlock & { finality_data: FinalityData }> {
   const [b] = await fetchFinalityRange(url, blockNum, blockNum);
-  if (!b) throw new Error(`no finality data for block ${blockNum}`);
-  return b;
+  if (!b?.finality_data) throw new Error(`no finality data for block ${blockNum}`);
+  return { ...b, finality_data: b.finality_data };
 }

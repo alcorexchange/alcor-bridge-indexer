@@ -29,7 +29,7 @@ const row = (over: Partial<TransferRow>): TransferRow => ({
   key: 'k', direction: 'deposit', ref: 7, status: 'seen', account: 'alice', evm_address: null, token: 'xpr',
   symbol: null, amount: '1000000', amount_raw: null, domain: XPR, src_block: 1, src_time: NOW - 60,
   src_tx: null, dst_block: null, dst_time: null, dst_tx: null, deadline: null, proof_at: null,
-  refund_tx: null, memo: null, updated_at: NOW, ...over,
+  refund_tx: null, memo: null, fee: null, updated_at: NOW, ...over,
 });
 
 test('a parked deposit is held once it has waited past the grace period, not before', () => {

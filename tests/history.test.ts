@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import { Store, depositKey, withdrawalKey, type ChainAction } from '../services/indexer/db.ts';
 import { applyBurns, applyCredits, applyDeplogs, applySettlements } from '../services/indexer/history.ts';
-import { humanAmount } from '../services/indexer/units.ts';
+import { humanAmount } from '../src/units.ts';
 
 const WAX = '1181148696416462999';
 

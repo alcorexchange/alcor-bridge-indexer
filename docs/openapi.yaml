@@ -1,0 +1,717 @@
+openapi: 3.1.0
+info:
+  title: Alcor bridge API
+  version: 1.0.0
+  license: { name: MIT, identifier: MIT }
+  summary: Read the bridge's state, plan a crossing, follow it, and fetch what to sign.
+  description: |
+    The public contract of the Alcor bridge API. Read-only, no authentication,
+    CORS open (`access-control-allow-origin: *`), JSON throughout.
+
+    **What is promised.** Every path, parameter and field written here keeps its
+    name and meaning. New fields, new values of an open list and new paths may
+    appear: read what you know and pass over the rest. A response may carry fields
+    not written here; those are details of this instance and may change.
+
+    **Two words for where a transfer stands.** `state` is the stable one, four
+    values, for a program to branch on. `status` is the bridge's detailed
+    lifecycle (`seen`, `provable`, `parked`…), shown for people and support,
+    and may gain values.
+
+    **Errors** are `{ "error": "<for a person>", "code": "<for a program>" }`.
+    `code` is one of `ErrorCode`; the message may change.
+
+    **Following transfers.** Open `GET /v1/stream` (server-sent events): a
+    `snapshot` of what you asked for, then a `transfer` event for each change,
+    and after a reconnect exactly what was missed. Or list the same events with
+    `GET /v1/events`.
+
+    The prose guide, with walkthroughs per chain, is `GET /docs`; signing every
+    action on every chain is `GET /docs/bot`.
+
+    `POST /v1/deposit-addresses`, `GET /v1/deposit-addresses/{address}` and
+    `GET /v1/fees` are served by the courier, beside the indexer under the same
+    base URL.
+servers:
+  - url: https://telos.alcor.exchange/api/bridge
+
+# Public and read-only: nothing to authenticate.
+security: []
+
+tags:
+  - name: transfers
+    description: One transfer as its sender sees it, from start to end, hops folded in.
+  - name: crossing
+    description: What can cross where, a plan to sign, and what is left to sign.
+  - name: chains
+    description: The chains, their routes, and what keeps them running.
+  - name: deposit addresses
+    description: The courier's deposit addresses and fees.
+  - name: service
+    description: Health, and the documents served by the API they describe.
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [service]
+      summary: Whether this instance follows the chains, and every alarm.
+      responses:
+        '200':
+          description: Always 200 while the process answers; `status` says how it is doing.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [instance, status, alarms]
+                properties:
+                  instance: { type: string }
+                  status: { type: string, enum: [following, catching-up, degraded] }
+                  alarms: { type: array, items: { type: string } }
+
+  /docs:
+    get:
+      operationId: getGuide
+      tags: [service]
+      summary: The front-end guide, as Markdown.
+      responses:
+        '200': { description: 'The guide.', content: { text/markdown: { schema: { type: string } } } }
+  /docs/bot:
+    get:
+      operationId: getBotGuide
+      tags: [service]
+      summary: The bridge from the signing side, as Markdown.
+      responses:
+        '200': { description: 'The guide.', content: { text/markdown: { schema: { type: string } } } }
+  /openapi.yaml:
+    get:
+      operationId: getContract
+      tags: [service]
+      summary: This document.
+      responses:
+        '200': { description: 'The contract.', content: { application/yaml: { schema: { type: string } } } }
+
+  # --- transfers -------------------------------------------------------------------
+
+  /v1/activity:
+    get:
+      operationId: listActivity
+      tags: [transfers]
+      summary: Every transfer, newest first, one item per transfer.
+      description: Shared for 15 seconds (`cache-control public, max-age=15`).
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: cursor, in: query, description: 'The previous page''s `cursor`.', schema: { type: string } }
+        - { name: chain, in: query, description: 'Either end, by chain id (`wax`, `mainnet`).', schema: { type: string } }
+        - { name: asset, in: query, description: 'A symbol, `USDC`.', schema: { type: string } }
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/State' } }
+        - { name: party, in: query, description: 'The start of an address or account at either end; case does not matter.', schema: { type: string } }
+      responses:
+        '200':
+          description: A page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, cursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Activity' } }
+                  cursor: { type: [string, 'null'], description: 'The next page''s; null when there is none.' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+
+  /v1/activity/{key}:
+    get:
+      operationId: getTransfer
+      tags: [transfers]
+      summary: One transfer, by any of its keys.
+      description: |
+        A direct crossing by its key; a hop by its deposit's key or any leg's; a
+        refused deposit by the withdrawal that sent it back; a rollback `v:<id>`
+        by its withdrawal. The answer is keyed by the transfer, whichever key was
+        asked. Read now, not from the shared feed.
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      responses:
+        '200':
+          description: The transfer.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Activity' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/activity/summary:
+    get:
+      operationId: getActivitySummary
+      tags: [transfers]
+      summary: Counts and volumes over a period, each transfer counted once.
+      description: Shared for 30 seconds.
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [24h, 7d, 30d, all], default: all } }
+      responses:
+        '200': { description: 'The summary.', content: { application/json: { schema: { type: object } } } }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+
+  /v1/stream:
+    get:
+      operationId: openStream
+      tags: [transfers]
+      summary: The transfers asked for, then each change to them, as it is seen (server-sent events).
+      description: |
+        `text/event-stream`, two kinds of message:
+
+        - `snapshot` — `data` is `Snapshot`: the transfers asked for as they
+          stand. Replace your list with it. Sent on opening, and instead of a
+          replay when one would not be whole.
+        - `transfer` — `data` is `Event`: one change. Put `transfer` in your list
+          by its `key`; `change` says whether it is worth telling the user.
+
+        Every message carries an `id`. A browser's `EventSource` reconnects by
+        itself and sends the last one as `Last-Event-ID`; the events since are
+        sent again, in order. Away longer than events are kept (30 days), or for
+        more than 500 of them, a `snapshot` comes instead. A client reconnecting
+        by hand passes `after`. A comment line (`: ping`) every 20 seconds keeps
+        proxies from closing an idle stream.
+
+        Asking: `key` (repeatable, up to 50) for some transfers by any of their
+        keys — one not seen yet is told when it is; `party` for every transfer
+        with that address or account at either end, exactly, any case; nothing
+        for every transfer. A snapshot of a party or of everything holds the
+        newest 50.
+      parameters:
+        - { name: key, in: query, description: 'A transfer, by any of its keys; repeat for several (up to 50).', schema: { type: string } }
+        - { name: party, in: query, description: 'An address or account at either end, exactly; case does not matter.', schema: { type: string } }
+        - { name: after, in: query, description: 'The last event id had, for a client that reconnects by hand (a browser sends `Last-Event-ID`).', schema: { type: integer } }
+        - { name: Last-Event-ID, in: header, schema: { type: integer } }
+      responses:
+        '200':
+          description: The stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+              # Each message's `data`, by its `event`.
+              x-events:
+                snapshot: { $ref: '#/components/schemas/Snapshot' }
+                transfer: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '429':
+          description: Too many streams open from one address (`RATE_LIMITED`).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /v1/events:
+    get:
+      operationId: listEvents
+      tags: [transfers]
+      summary: The same events as the stream, listed.
+      description: |
+        Without `after`, the newest `limit` — a notification panel's "latest".
+        With it, the ones after, oldest first — to poll instead of streaming,
+        passing back `last` each time. Kept 30 days.
+      parameters:
+        - { name: key, in: query, description: 'A transfer, by any of its keys; repeatable.', schema: { type: string } }
+        - { name: party, in: query, schema: { type: string } }
+        - { name: after, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+      responses:
+        '200':
+          description: The events, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, last]
+                properties:
+                  events: { type: array, items: { $ref: '#/components/schemas/Event' } }
+                  last: { type: integer, description: 'The newest id listed (or `after`); pass it as `after` next time.' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+
+  /v1/transfers:
+    get:
+      operationId: listTransferRows
+      tags: [transfers]
+      summary: Crossings as rows, newest first; a hop's legs are rows of their own.
+      parameters:
+        - { name: account, in: query, schema: { type: string } }
+        - { name: address, in: query, schema: { type: string } }
+        - { name: direction, in: query, schema: { type: string, enum: [deposit, withdrawal] } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: flag, in: query, schema: { type: string } }
+        - { name: before, in: query, description: 'A unix second; rows sent before it.', schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
+      responses:
+        '200':
+          description: The rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transfers: { type: array, items: { $ref: '#/components/schemas/Transfer' } }
+                  count: { type: integer }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+
+  /v1/transfers/{key}:
+    get:
+      operationId: getTransferRow
+      tags: [transfers]
+      summary: One crossing as a row, with its flags, proof track and progress.
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      responses:
+        '200': { description: 'The row.', content: { application/json: { schema: { $ref: '#/components/schemas/Transfer' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/accounts/{account}:
+    get:
+      operationId: getAccount
+      tags: [transfers]
+      summary: A Telos account's crossings, counts, and what it may claim.
+      parameters:
+        - { name: account, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'The account.', content: { application/json: { schema: { type: object } } } }
+
+  /v1/accounts/{account}/transfers:
+    get:
+      operationId: listAccountTransferRows
+      tags: [transfers]
+      summary: A Telos account's crossings as rows.
+      parameters:
+        - { name: account, in: path, required: true, schema: { type: string } }
+        - { name: before, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
+      responses:
+        '200':
+          description: The rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account: { type: string }
+                  transfers: { type: array, items: { $ref: '#/components/schemas/Transfer' } }
+
+  /v1/hops:
+    get:
+      operationId: listHops
+      tags: [transfers]
+      summary: Journeys through the hop contract (a chain to a chain through Telos), newest first.
+      parameters:
+        - { name: party, in: query, schema: { type: string } }
+        - { name: before, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
+        - { name: recover, in: query, description: '`true`: only the journeys waiting on a `recover`.', schema: { type: string, enum: ['true'] } }
+      responses:
+        '200':
+          description: The journeys.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hops: { type: array, items: { $ref: '#/components/schemas/Journey' } }
+                  count: { type: integer }
+
+  /v1/hops/{key}:
+    get:
+      operationId: getHop
+      tags: [transfers]
+      summary: One journey, by its deposit's key.
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      responses:
+        '200': { description: 'The journey.', content: { application/json: { schema: { $ref: '#/components/schemas/Journey' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # --- crossing ----------------------------------------------------------------------
+
+  /v1/routes:
+    get:
+      operationId: listRoutes
+      tags: [crossing]
+      summary: Every pair of chains an asset can cross between, open or not, and why.
+      parameters:
+        - { name: symbol, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string } }
+        - { name: to, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: The routes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  routes: { type: array, items: { $ref: '#/components/schemas/Route' } }
+                  count: { type: integer }
+
+  /v1/swap/plan:
+    get:
+      operationId: planCrossing
+      tags: [crossing]
+      summary: One token on one chain to another token on another chain, swaps included, ready to sign.
+      description: Not possible now is still 200, with `possible false` and the `reason`.
+      parameters:
+        - { name: from, in: query, required: true, description: '`<chain>:<SYMBOL>`, or `<chain>:<SYMBOL>@<contract>` on an Antelope chain.', schema: { type: string } }
+        - { name: to, in: query, required: true, schema: { type: string } }
+        - { name: amount, in: query, required: true, description: 'Whole tokens, a decimal.', schema: { type: string } }
+        - { name: recipient, in: query, required: true, schema: { type: string } }
+        - { name: sender, in: query, required: true, schema: { type: string } }
+        - { name: slippageBps, in: query, schema: { type: integer, minimum: 1, maximum: 2000, default: 50 } }
+        - { name: deadlineSeconds, in: query, schema: { type: integer, minimum: 60, default: 1800 } }
+        - { name: courierFee, in: query, description: 'Canonical units of the token out, from `GET /v1/fees`; an EVM destination only.', schema: { type: string } }
+      responses:
+        '200': { description: 'The plan, or why there is none.', content: { application/json: { schema: { $ref: '#/components/schemas/Plan' } } } }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+
+  /v1/swap/quote:
+    get:
+      operationId: quoteEvmSwap
+      tags: [crossing]
+      summary: The swap half of an `AlcorRouter` call on an EVM chain.
+      parameters:
+        - { name: chain, in: query, required: true, schema: { type: string } }
+        - { name: tokenIn, in: query, required: true, schema: { type: string } }
+        - { name: tokenOut, in: query, required: true, schema: { type: string } }
+        - { name: amountIn, in: query, required: true, description: 'Raw units.', schema: { type: string } }
+        - { name: slippageBps, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200': { description: 'The quote.', content: { application/json: { schema: { type: object } } } }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+
+  /v1/pending:
+    get:
+      operationId: listPending
+      tags: [crossing]
+      summary: Everything waiting for somebody to sign, and whether it can be signed now.
+      parameters:
+        - { name: account, in: query, schema: { type: string } }
+        - { name: address, in: query, schema: { type: string } }
+        - { name: chain, in: query, description: 'Where it is signed (`pushOn`).', schema: { type: string } }
+        - { name: ready, in: query, schema: { type: string, enum: ['true'] } }
+      responses:
+        '200':
+          description: The queue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pending: { type: array, items: { $ref: '#/components/schemas/PendingItem' } }
+                  count: { type: integer }
+                  asOf: { type: integer }
+
+  /v1/proofs/{key}:
+    get:
+      operationId: getProof
+      tags: [crossing]
+      summary: Everything needed to finish a crossing, in the shape its chain takes.
+      description: |
+        A deposit or rollback: the Telos actions (`finalized`, and `fast` where the
+        route allows). A withdrawal to an EVM chain: `hard` always, `light` when a
+        trusted root folds it, `track` says which is cheaper. To Sui or NEAR: the
+        calls a wallet makes. A 404 with `PROOF_NOT_READY` is usually "not yet".
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      responses:
+        '200': { description: 'The proof.', content: { application/json: { schema: { type: object } } } }
+        '404':
+          description: No such transfer (`NOT_FOUND`), or no proof yet (`PROOF_NOT_READY`, with the transfer's `status`).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /v1/handovers:
+    get:
+      operationId: listHandovers
+      tags: [crossing]
+      summary: Telos's finalizer-policy handovers, for a light client to catch up.
+      parameters:
+        - { name: after, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: 'The handovers.', content: { application/json: { schema: { type: object } } } }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+
+  # --- chains --------------------------------------------------------------------------
+
+  /v1/chains:
+    get:
+      operationId: listChains
+      tags: [chains]
+      summary: Every chain, its contracts, routes, limits, timing, and whether each direction is open.
+      responses:
+        '200':
+          description: The chains.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settlement: { type: object }
+                  sources: { type: array, items: { $ref: '#/components/schemas/Chain' } }
+
+  /v1/reserves:
+    get:
+      operationId: getReserves
+      tags: [chains]
+      summary: Issued on Telos against held over there, per asset.
+      responses:
+        '200': { description: 'The reserves.', content: { application/json: { schema: { type: object } } } }
+
+  # --- deposit addresses (the courier) -----------------------------------------------------
+
+  /v1/deposit-addresses:
+    post:
+      operationId: createDepositAddress
+      tags: [deposit addresses]
+      summary: The deposit address for a destination, registered for watching. The same request always answers the same.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chain, to]
+              properties:
+                chain: { type: string, description: '`telos`, or a destination chain id.' }
+                to: { type: string, description: 'The recipient there.' }
+      responses:
+        '200': { description: 'The address.', content: { application/json: { schema: { type: object } } } }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '429':
+          description: Too many new addresses from one client (`RATE_LIMITED`).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+
+  /v1/deposit-addresses/{address}:
+    get:
+      operationId: getDepositAddress
+      tags: [deposit addresses]
+      summary: A deposit address's destination, holds, and its last forwards.
+      parameters:
+        - { name: address, in: path, required: true, schema: { type: string, pattern: '^0x[0-9a-fA-F]{40}$' } }
+      responses:
+        '200': { description: 'The address.', content: { application/json: { schema: { type: object } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/fees:
+    get:
+      operationId: getFees
+      tags: [deposit addresses]
+      summary: What a forward and a delivered withdrawal cost now, per chain and token.
+      responses:
+        '200': { description: 'The fees.', content: { application/json: { schema: { type: object } } } }
+
+components:
+  parameters:
+    Key:
+      name: key
+      in: path
+      required: true
+      description: '`d:<chainId>:<nonce>` a deposit, `w:<id>` a withdrawal, `v:<id>` its rollback. URL-encode the colons.'
+      schema: { type: string }
+
+  responses:
+    InvalidRequest:
+      description: A parameter out of range or malformed (`INVALID_REQUEST`).
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: No such thing (`NOT_FOUND`).
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    UpstreamError:
+      description: A chain or service the answer needed did not answer (`UPSTREAM_ERROR`). Worth retrying.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    ErrorCode:
+      type: string
+      description: Only gains values.
+      enum: [INVALID_REQUEST, NOT_FOUND, PROOF_NOT_READY, METHOD_NOT_ALLOWED, RATE_LIMITED, UPSTREAM_ERROR, INTERNAL_ERROR]
+
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string, description: 'Written to be shown to a person.' }
+        code: { $ref: '#/components/schemas/ErrorCode' }
+
+    State:
+      type: string
+      description: |
+        Where a transfer stands. `delivered` at the recipient; `returned` not
+        delivered, given back (or on its way back); `action_needed` the next step
+        is the user's (a release to sign on an EVM chain); `in_progress` the
+        bridge's move.
+      enum: [in_progress, action_needed, delivered, returned]
+
+    Progress:
+      type: object
+      required: [stage, percent, etaSeconds, exact, waitingOn]
+      properties:
+        stage: { type: string, description: 'What is happening now, in words.' }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+        etaSeconds: { type: [integer, 'null'], description: 'Until the bridge''s part is done; null when finished or waiting on a person.' }
+        exact: { type: boolean, description: 'Counted from the chain, or estimated from measured timings.' }
+        waitingOn: { type: [string, 'null'], enum: [bridge, user, null] }
+
+    Activity:
+      type: object
+      description: One transfer as its sender sees it.
+      required: [key, kind, from, to, asset, amount, state, waitingOn, stage, startedAt, finishedAt, srcTx, dstTx]
+      properties:
+        key: { type: string, description: 'The deposit''s key for a hop, the row''s for a direct crossing.' }
+        kind: { type: string, enum: [direct, hop] }
+        from:
+          type: object
+          properties:
+            chain: { type: [string, 'null'] }
+            address: { type: [string, 'null'], description: 'An EVM address or an account.' }
+        to:
+          type: object
+          properties:
+            chain: { type: [string, 'null'] }
+            recipient: { type: [string, 'null'] }
+        asset:
+          type: [object, 'null']
+          properties:
+            symbol: { type: string }
+            precision: { type: integer }
+        amount: { type: [string, 'null'], description: 'A decimal in `asset.precision`, never a float.' }
+        state: { $ref: '#/components/schemas/State' }
+        waitingOn: { type: [string, 'null'], enum: [bridge, user, null] }
+        stage: { type: string }
+        startedAt: { type: integer, description: 'Unix seconds, on the chain it was sent from.' }
+        finishedAt: { type: [integer, 'null'] }
+        srcTx: { type: [string, 'null'] }
+        dstTx: { type: [string, 'null'], description: 'The transaction that paid it out where it ended.' }
+
+    Change:
+      type: string
+      description: |
+        What an event changed, in one word. `new` the bridge has just seen it;
+        `action_needed` the next step became the user's; `delivered` at the
+        recipient; `returned` given back or on its way back; `progress` anything
+        else. All but `progress` are worth a notification. Only gains values.
+      enum: [new, progress, action_needed, delivered, returned]
+
+    Event:
+      type: object
+      required: [id, at, change, transfer, previous]
+      properties:
+        id: { type: integer, description: 'Increasing; what `Last-Event-ID` and `after` name.' }
+        at: { type: integer, description: 'Unix seconds, when the bridge saw the change.' }
+        change: { $ref: '#/components/schemas/Change' }
+        transfer: { $ref: '#/components/schemas/Activity' }
+        previous:
+          type: [object, 'null']
+          description: Where it stood before; null for `new`.
+          properties:
+            state: { $ref: '#/components/schemas/State' }
+            stage: { type: string }
+
+    Snapshot:
+      type: object
+      required: [transfers, lastEventId]
+      properties:
+        transfers: { type: array, items: { $ref: '#/components/schemas/Activity' } }
+        lastEventId: { type: integer, description: 'The newest event it already includes.' }
+
+    Transfer:
+      type: object
+      description: One crossing to or from Telos, as a row.
+      required: [key, direction, status, state, domain, chain, amount, flags, hasProof, progress]
+      properties:
+        key: { type: string }
+        direction: { type: string, enum: [deposit, withdrawal] }
+        status: { type: string, description: 'The detailed lifecycle; see the guide. May gain values.' }
+        state: { $ref: '#/components/schemas/State' }
+        domain: { type: string, description: 'The far chain''s domain on the ledger.' }
+        chain: { type: [string, 'null'], description: 'The far chain''s id.' }
+        account: { type: [string, 'null'], description: 'The Telos account.' }
+        evm_address: { type: [string, 'null'], description: 'The address or account on the far chain.' }
+        amount: { type: [string, 'null'], description: 'Canonical units, an integer.' }
+        amountHuman: { type: [string, 'null'] }
+        asset: { type: [object, 'null'] }
+        src_tx: { type: [string, 'null'] }
+        src_time: { type: integer }
+        dst_tx: { type: [string, 'null'] }
+        dst_time: { type: [integer, 'null'] }
+        deadline: { type: [integer, 'null'] }
+        fee: { type: [string, 'null'], description: 'A withdrawal''s delivery fee, canonical units.' }
+        flags: { type: array, items: { type: string }, description: 'stuck, past-deadline, unfrozen, rolled-back, held, over-limit, daily-limit…' }
+        hasProof: { type: boolean }
+        track: { type: [string, 'null'], enum: [light, hard, null] }
+        progress: { $ref: '#/components/schemas/Progress' }
+        hop: { type: [object, 'null'] }
+        swap: { type: [object, 'null'] }
+
+    Journey:
+      type: object
+      description: A crossing through the hop contract, keyed by its deposit.
+      required: [key, status, legs]
+      properties:
+        key: { type: string }
+        status: { type: string, enum: [arriving, bounced, sending, delivered, returning, returned] }
+        from: { type: object }
+        to: { type: [object, 'null'] }
+        back: { type: [object, 'null'] }
+        deposit: { $ref: '#/components/schemas/Transfer' }
+        legs: { type: array, items: { type: object } }
+        progress: { $ref: '#/components/schemas/Progress' }
+        recover: { type: [object, 'null'], description: 'The action that sends a voided leg back.' }
+
+    Route:
+      type: object
+      required: [symbol, precision, from, to, open, reason]
+      properties:
+        symbol: { type: string }
+        precision: { type: integer }
+        from: { type: string }
+        to: { type: string }
+        via: { type: [string, 'null'], description: 'The hop account for a chain to a chain through Telos.' }
+        open: { type: boolean }
+        reason: { type: [string, 'null'] }
+        min: { type: [string, 'null'] }
+        max: { type: [string, 'null'] }
+        how: { type: object, description: 'What to sign to start it.' }
+
+    Plan:
+      type: object
+      required: [possible]
+      properties:
+        possible: { type: boolean }
+        reason: { type: string, description: 'Why not, when `possible` is false.' }
+        from: { type: object }
+        to: { type: object }
+        swaps: { type: array, items: { type: object } }
+        sign: { type: object, description: 'The one thing the user signs: `kind actions` on an Antelope chain, `kind deposit` on an EVM one.' }
+        release: { type: [string, 'null'], enum: [courier, user, relayer, null] }
+        eta: { type: object }
+        follow: { type: string }
+
+    PendingItem:
+      type: object
+      required: [key, direction, action, pushOn, ready, reason]
+      properties:
+        key: { type: string }
+        direction: { type: string }
+        action: { type: string, description: 'The action a wallet would sign, in words.' }
+        pushOn: { type: string, description: 'The chain it is signed on.' }
+        ready: { type: boolean }
+        reason: { type: string }
+        proof: { type: [string, 'null'], description: 'Where its proof is.' }
+        deadline: { type: object }
+
+    Chain:
+      type: object
+      required: [id, name, active, routes]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string }
+        active:
+          type: object
+          properties:
+            deposits: { type: boolean }
+            withdrawals: { type: boolean }
+            reason: { type: string }
+        timing: { type: object }
+        routes: { type: array, items: { type: object } }

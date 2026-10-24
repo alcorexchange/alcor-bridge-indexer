@@ -97,7 +97,7 @@ test('a block with WAX and EVM burns: one ordinal count, and only the EVM ones a
   );
   // Every EVM one decodes as a proof payload; the WAX one would throw, which is
   // what used to abort a whole block and leave withdrawal 43 unfrozen.
-  for (const w of wdlogs.filter((x) => x.evm)) assert.equal(decodeWdlog(w.data).id, w.id);
+  for (const w of wdlogs.filter((x) => x.frozen)) assert.equal(decodeWdlog(w.data).id, w.id);
   assert.throws(() => decodeWdlog(wdlogs[1].data), /^Error: wdlog/);
   // A replay for withdrawal 43 proves ordinal 2 and nothing else.
   assert.equal(wdlogs.find((w) => w.id === 43n)!.ordinal, 2);

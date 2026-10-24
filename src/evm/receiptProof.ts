@@ -7,7 +7,7 @@
  * than left to the caller.
  */
 import { Trie } from '@ethereumjs/trie';
-import { RLP } from '@ethereumjs/rlp';
+import { RLP, type Input } from '@ethereumjs/rlp';
 import { activeExec, type Exec } from './exec.ts';
 import { toHex, fromHex } from '../proof/hex.ts';
 
@@ -27,7 +27,7 @@ import { toHex, fromHex } from '../proof/hex.ts';
  */
 export function encodeReceipt(r: any): Uint8Array {
   const logs = r.logs.map((l: any) => [fromHex(l.address), l.topics.map(fromHex), fromHex(l.data)]);
-  const fields: unknown[] = [
+  const fields: Input[] = [
     BigInt(r.status) === 0n ? new Uint8Array(0) : Uint8Array.of(1),
     BigInt(r.cumulativeGasUsed),
     fromHex(r.logsBloom),

@@ -32,8 +32,8 @@ import { existsSync } from 'node:fs';
 import type { IndexerConfig } from './config.ts';
 import { leafWindowBlocks } from './config.ts';
 import { Store, withdrawalKey, depositKey, externalToken } from './db.ts';
-import { LeafStore, alignLeaves } from './leaves.ts';
-import { treeThrough } from './tree.ts';
+import { LeafStore, alignLeaves } from '../../src/savanna/leaves.ts';
+import { treeThrough } from '../../src/savanna/rebranch.ts';
 import { antelopeBurns, bridgeAbi, readBridgeEvents } from './bridgeActions.ts';
 import { applyBridgeEvents } from './ledgerEvents.ts';
 

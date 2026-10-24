@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 
-import { createApi, type Deps } from '../services/indexer/api.ts';
+import { createApi, type Deps } from '../services/indexer/api/index.ts';
 import { antelopeChains, type IndexerConfig } from '../services/indexer/config.ts';
 import { Store, depositKey, voidKey, withdrawalKey } from '../services/indexer/db.ts';
 import { symbolCodeRaw } from '../services/indexer/fast.ts';
@@ -246,6 +246,9 @@ const PATHS = [
   '/v1/chains',
   '/v1/routes',
   '/health',
+  ...[depositKey('1', 14), withdrawalKey(9), voidKey(7), 'nope'].map((k) => `/v1/activity/${encodeURIComponent(k)}`),
+  '/v1/activity?limit=200',
+  '/v1/nope',
 ];
 
 test('the API answers exactly as the golden file says', async () => {
@@ -291,6 +294,29 @@ test('the API answers exactly as the golden file says', async () => {
   if (process.env.UPDATE_GOLDEN === '1') writeFileSync(GOLDEN, JSON.stringify(got, null, 1) + '\n');
   assert.ok(existsSync(GOLDEN), `no ${GOLDEN}; write it with UPDATE_GOLDEN=1 and review it`);
   assert.deepEqual(got, JSON.parse(readFileSync(GOLDEN, 'utf8')));
+});
+
+test('a browser preflight is answered, and only reading is served', async () => {
+  const restore = stubNodes();
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'alcor-api-')), 'indexer.sqlite'));
+  const server = createApi({ cfg, store, keepers: new Map(), histories: [], startedAt: NOW * 1000 } as unknown as Deps);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/activity`;
+    const preflight = await fetch(url, { method: 'OPTIONS' });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), '*');
+    assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, OPTIONS');
+
+    const post = await fetch(url, { method: 'POST', body: '{}' });
+    assert.equal(post.status, 405);
+    assert.equal(post.headers.get('allow'), 'GET, HEAD, OPTIONS');
+    assert.deepEqual(await post.json(), { error: 'POST is not served: this API only reads', code: 'METHOD_NOT_ALLOWED' });
+  } finally {
+    server.close();
+    store.close();
+    restore();
+  }
 });
 
 test('a voided hop bridgeroute opened is served for recover, though no deposit started it', async () => {

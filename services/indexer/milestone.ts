@@ -13,7 +13,7 @@ import { proveReceipt } from '../../src/evm/receiptProof.ts';
 import { activeExec, type Exec } from '../../src/evm/exec.ts';
 import { hexToBytes } from '../../src/bsc/header.ts';
 import { bare } from '../../src/proof/hex.ts';
-import type { Frozen, LogToFreeze } from './prover.ts';
+import type { Frozen, LogToFreeze } from '../../src/proof/prover.ts';
 
 export type MilestoneProverConfig = {
   evm: { id: string };

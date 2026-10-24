@@ -7,6 +7,10 @@
  * bridge. Here the registry is the only source and config derives from it.
  */
 
+import { keccak_256 } from '@noble/hashes/sha3.js';
+
+import { toHex0x } from '../proof/hex.ts';
+
 export type ProofStrategy =
   /** An L1 with a sync committee: signature + SSZ branches + receipt trie. */
   | 'beacon'
@@ -107,6 +111,19 @@ export type EvmChain = {
  */
 export const DEPOSIT_TOPIC =
   '0x13b5e8bb47a4ed47ba8b8a0cc1a517faa77d886adcf4b02e4fe0c014712a936f';
+
+const topicOf = (signature: string): string => toHex0x(keccak_256(new TextEncoder().encode(signature)));
+
+/** topic0 of every vault and light-client log the bridge listens to. */
+export const TOPICS = {
+  deposit: DEPOSIT_TOPIC,
+  // The vault's, which names the courier's fee; the withdrawals contract emits
+  // the four-field one, and only the vault's is listened to.
+  released: topicOf('Released(uint64,address,address,uint256,address,uint256)'),
+  voided: topicOf('Voided(uint64)'),
+  expired: topicOf('Expired(uint64)'),
+  rootAccepted: topicOf('RootAccepted(bytes32,bytes32,uint32)'),
+};
 
 export const EVM_CHAINS: Record<string, EvmChain> = {
   mainnet: {

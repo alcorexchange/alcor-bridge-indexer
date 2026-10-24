@@ -393,7 +393,21 @@ through unchanged:
 location ^~ /api/bridge/ {
     proxy_pass http://127.0.0.1:8899;
 }
+
+# Server-sent events: unbuffered, and held open (the API pings every 20 s).
+location = /api/bridge/v1/stream {
+    proxy_pass http://127.0.0.1:8899;
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    proxy_buffering off;
+    proxy_pass_header X-Accel-Buffering;
+    proxy_read_timeout 1h;
+}
 ```
+
+The API answers `X-Accel-Buffering: no` on a stream, which one nginx obeys and
+drops; `proxy_pass_header` hands it on, so a second proxy in front (a load
+balancer) does not buffer the stream either.
 
 Do not open the port on a public interface beside the proxy. That would be a way
 around both the TLS and any rate limit you put there.

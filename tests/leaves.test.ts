@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-import { LeafStore, LEAF_BYTES, alignLeaves } from '../services/indexer/leaves.ts';
+import { LeafStore, LEAF_BYTES, alignLeaves } from '../src/savanna/leaves.ts';
 
 const leaf = (n: number) => new Uint8Array(createHash('sha256').update(String(n)).digest());
 const dir = () => mkdtempSync(join(tmpdir(), 'alcor-leaves-'));

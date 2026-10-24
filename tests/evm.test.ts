@@ -9,9 +9,10 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { EvmFollower, TOPICS } from '../services/indexer/evm.ts';
+import { EvmFollower } from '../services/indexer/evm.ts';
+import { TOPICS } from '../src/chains/evm.ts';
 import { Store, depositKey, voidKey } from '../services/indexer/db.ts';
-import type { Frozen, LogToFreeze, Prover } from '../services/indexer/prover.ts';
+import type { Frozen, LogToFreeze, Prover } from '../src/proof/prover.ts';
 import type { IndexerConfig } from '../services/indexer/config.ts';
 import type { EvmChain } from '../src/chains/evm.ts';
 
@@ -48,7 +49,7 @@ class FakeProver implements Prover {
 test('one freeze loop: mature logs are frozen and recorded, the rest wait', async () => {
   const store = new Store(join(mkdtempSync(join(tmpdir(), 'alcor-evm-')), 'indexer.sqlite'));
   const cfg = { evm: { id: 'not-this-one' } } as unknown as IndexerConfig;
-  const follower = new EvmFollower(cfg, store, { chain: CHAIN, accounts: { lightClient: 'lc', gateway: 'gw' } });
+  const follower = new EvmFollower(cfg, store, { chain: CHAIN, accounts: { lightClient: 'lc', gateway: 'gw' }, exec: [] });
   const prover = new FakeProver(100);
   // The follower's insides, driven directly: no
   // node is asked anything, so the times of the blocks are put in by hand.

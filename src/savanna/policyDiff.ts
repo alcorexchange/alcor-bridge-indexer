@@ -33,9 +33,9 @@ import { encodeBlsPublicKeyRaw } from './encoding.ts';
  * Sequential byte reader over an fc::raw::pack stream.
  *
  * Fields are declared explicitly rather than as constructor parameter
- * properties: the whole project runs under `node --experimental-strip-types`,
- * which erases types without transforming syntax, so parameter properties,
- * enums and namespaces are all unavailable.
+ * properties: Node runs the .ts files by stripping types, which erases them
+ * without transforming syntax, so parameter properties, enums and namespaces
+ * are all unavailable (`erasableSyntaxOnly` in tsconfig.json enforces it).
  */
 export class Reader {
   private i = 0;

@@ -22,10 +22,10 @@
  * seed in minutes. A checkpoint is written at the end either way, so the next
  * withdrawal near this one is cheap.
  *
- *   node --experimental-strip-types scripts/build-withdrawal.ts <burnBlock> [outFile]
+ *   node scripts/build-withdrawal.ts <burnBlock> [outFile]
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 
 import { savannaChain } from '../src/chains/savanna.ts';
 import { fetchFinalityRange, fetchRange } from '../src/savanna/ship.ts';

@@ -9,6 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "typecheck": "tsc -p .",
     "start": "node services/indexer/index.ts",
     "check": "node services/indexer/index.ts --check",
     "test": "node --test 'tests/**/*.test.ts'",
@@ -27,5 +28,10 @@
     "@wharfkit/antelope": "^1.0.13",
     "undici": "^7.0.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/ws": "8.18.1",
+    "typescript": "7.0.2"
   }
 }

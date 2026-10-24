@@ -38,7 +38,7 @@ import { decodeBlocksResult, encodeAck, encodeRequest } from '../../src/savanna/
 import { hex, unhex, LegacyIncrementalMerkle } from '../../src/wax/legacy.ts';
 import type { LegacyChain } from '../../src/chains/antelope.ts';
 import { writeJsonAtomic } from '../../src/files.ts';
-import { LeafStore } from './leaves.ts';
+import { LeafStore } from '../../src/savanna/leaves.ts';
 
 export type KeeperConfig = {
   chain: LegacyChain;
