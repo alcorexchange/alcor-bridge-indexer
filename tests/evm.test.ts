@@ -1,7 +1,8 @@
 /**
  * The EVM follower's freeze loop, against a prover that answers from memory:
  * what is mature is frozen and stored once, what is not waits, a failure stays
- * queued, and the deposit's row moves to `provable`.
+ * queued, and the deposit's row moves to `provable`. And the settled-withdrawal
+ * check: what it searches, and when it files an incident.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +12,7 @@ import { join } from 'node:path';
 
 import { EvmFollower } from '../services/indexer/evm.ts';
 import { TOPICS } from '../src/chains/evm.ts';
-import { Store, depositKey, voidKey } from '../services/indexer/db.ts';
+import { Store, depositKey, voidKey, withdrawalKey } from '../services/indexer/db.ts';
 import type { Frozen, LogToFreeze, Prover } from '../src/proof/prover.ts';
 import type { IndexerConfig } from '../services/indexer/config.ts';
 import type { EvmChain } from '../src/chains/evm.ts';
@@ -90,5 +91,53 @@ test('one freeze loop: mature logs are frozen and recorded, the rest wait', asyn
   await inner.freezeMatured();
   assert.equal(prover.frozen.length, 3);
   assert.deepEqual([...inner.awaitingFinality.keys()], [depositKey(999, 3)]);
+  store.close();
+});
+
+test('a withdrawal settled on the vault: searched in exact spans, an incident only when nobody saw it', async () => {
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'alcor-evm-')), 'indexer.sqlite'));
+  const cfg = { evm: { id: 'not-this-one' } } as unknown as IndexerConfig;
+  const follower = new EvmFollower(cfg, store, { chain: CHAIN, accounts: { lightClient: 'lc', gateway: 'gw' }, exec: [] });
+  const inner = follower as any;
+  // The node is a block behind the poller, and no endpoint has the event.
+  inner.state.head = 600_001;
+  const ranges: Array<[number, number]> = [];
+  let onSearch = () => {};
+  inner.exec = {
+    urls: [],
+    rpc: async () => '0x' + '1'.padStart(64, '0'),
+    head: async () => 600_000,
+    logs: async (f: any) => {
+      ranges.push([Number(f.fromBlock), Number(f.toBlock)]);
+      onSearch();
+      return [];
+    },
+  };
+  const open = (ref: number) =>
+    store.upsertTransfer({ key: withdrawalKey(ref), direction: 'withdrawal', ref, status: 'provable', domain: '999', src_block: 1, src_time: 1 });
+  const settledElsewhere = () => store.recentIncidents(10).filter((i) => i.kind === 'settled-elsewhere');
+
+  // The poller records the release while the search is still walking history.
+  open(1);
+  onSearch = () => store.upsertTransfer({ key: withdrawalKey(1), direction: 'withdrawal', ref: 1, status: 'released', dst_block: 599_999 });
+  assert.equal(await follower.checkSettled(), 1);
+  assert.equal(settledElsewhere().length, 0);
+  assert.deepEqual([store.getTransfer(withdrawalKey(1))!.status, store.getTransfer(withdrawalKey(1))!.dst_block], ['released', 599_999]);
+
+  // From the poller's head down, two topics per span, every span exactly
+  // LOG_SPAN blocks or the remainder, no block twice, none skipped.
+  const spans = ranges.filter((_, i) => i % 2 === 0);
+  assert.deepEqual(spans[0], [598_002, 600_001]);
+  for (const [from, to] of spans) assert.ok(to - from + 1 <= 2_000);
+  for (let i = 1; i < spans.length; i++) assert.equal(spans[i][1], spans[i - 1][0] - 1);
+  assert.equal(spans.at(-1)![0], 100_001);
+
+  // Nobody saw this one: that is the incident.
+  open(2);
+  onSearch = () => {};
+  assert.equal(await follower.checkSettled(), 1);
+  assert.equal(settledElsewhere().length, 1);
+  assert.match(settledElsewhere()[0].detail, /withdrawal 2 .* event not found/);
+  assert.equal(store.getTransfer(withdrawalKey(2))!.status, 'released');
   store.close();
 });

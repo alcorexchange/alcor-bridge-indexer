@@ -829,6 +829,11 @@ export class EvmFollower {
         if (BigInt(word) !== 1n) continue;
 
         const found = await this.findSettlement(t.ref);
+        // The search walks history and can take minutes; the poller may have
+        // recorded the settlement meanwhile. Statuses only move forward, so a
+        // changed one is that (w:460 on BSC, 2026-10-25: paid while this pass
+        // ran, its search started from a node a block behind and found nothing).
+        const recordedMeanwhile = this.store.getTransfer(t.key)?.status !== t.status;
         this.store.upsertTransfer({
           key: t.key,
           direction: 'withdrawal',
@@ -841,7 +846,7 @@ export class EvmFollower {
         // A settlement in a block the log poller has not reached yet is a race
         // this pass merely won (w:364 on BSC, 2026-10-22: paid twelve seconds
         // before the next poll). Only one behind the poller was missed.
-        if (!found || found.block <= this.state.at) {
+        if (!recordedMeanwhile && (!found || found.block <= this.state.at)) {
           this.store.incident(
             'settled-elsewhere',
             `withdrawal ${t.ref} is settled on the vault (${found?.status ?? 'released'}` +
@@ -864,15 +869,18 @@ export class EvmFollower {
   ): Promise<{ status: 'released' | 'expired'; block: number; at: number; tx: string } | undefined> {
     const vault = this.chain.vault!;
     const idTopic = '0x' + id.toString(16).padStart(64, '0');
-    const head = await this.exec.head();
+    // Never below where the poller already is: a node a block behind would
+    // start the search under a settlement that has just happened.
+    const head = Math.max(await this.exec.head(), this.state.head);
     const floor = this.fromBlock || head - 500_000;
 
     // In LOG_SPAN steps, not wide ones. A public node handed a fifty-thousand
     // block range does not refuse it — it answers with nothing, which reads as
     // "no such event" and is how withdrawal 1 came back as settled with no
-    // record of which way it went.
-    for (let to = head; to > floor; to -= LOG_SPAN) {
-      const from = Math.max(floor, to - LOG_SPAN);
+    // record of which way it went. Both ends are inclusive, so a step is
+    // `to - LOG_SPAN + 1 … to`: one block more and Ankr refuses the range.
+    for (let to = head; to >= floor; to -= LOG_SPAN) {
+      const from = Math.max(floor, to - LOG_SPAN + 1);
       for (const [topic, status] of [
         [TOPICS.released, 'released'],
         [TOPICS.voided, 'expired'],
