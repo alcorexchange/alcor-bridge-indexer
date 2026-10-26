@@ -16,7 +16,7 @@
  */
 
 import type { EvmChain } from '../../src/chains/evm.ts';
-import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, nearDepositEta, nearWithdrawalEta, suiDepositEta, suiWithdrawalEta, withdrawalEta, type Eta } from '../../src/chains/eta.ts';
+import { antelopeDepositEta, antelopeWithdrawalEta, depositEta, depositFastEta, nearDepositEta, nearWithdrawalEta, suiDepositEta, suiWithdrawalEta, withdrawalEta, type Eta } from '../../src/chains/eta.ts';
 import { NEAR_ACCOUNT } from '../../src/chains/near.ts';
 import { antelopeVaults } from '../../src/chains/antelope.ts';
 import { HOP_MEMO, antelopeSwapsView, evmSwapsView } from '../../src/chains/swaps.ts';
@@ -64,7 +64,7 @@ export type ChainStatus = {
    * number for all of them is wrong on most of them. A withdrawal is null where
    * the chain has no withdrawals contract; `active.reason` says so.
    */
-  timing: { deposit: Eta; withdrawal: Eta | null };
+  timing: { deposit: Eta; withdrawal: Eta | null; depositFast?: Eta };
   /**
    * Whether each direction is open right now, for a button to be greyed on.
    *
@@ -414,6 +414,18 @@ function routesOf({ routes, assets, spokes }: Ledger, domain: string, vault: str
     });
 }
 
+/**
+ * Each direction's wait on an EVM chain, and the fast path's beside the deposit
+ * where a route has one — it is the wait most deposits actually have, and
+ * without it a front end can only offer finality's quarter of an hour.
+ * The deepest confirmation count among those routes is the one said.
+ */
+function timingOf(chain: EvmChain, routes: ReturnType<typeof routesOf>): ChainStatus['timing'] {
+  const confirmations = Math.max(0, ...routes.filter((r) => r.fastMax !== '0').map((r) => r.minConfirmations));
+  const fast = depositFastEta(chain, confirmations);
+  return { deposit: depositEta(chain), withdrawal: withdrawalEta(chain), ...(fast ? { depositFast: fast } : {}) };
+}
+
 export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<string, unknown>, keepers: Map<string, BlockrootKeeper>) {
   const ledger = await readLedger(cfg);
   // An Antelope chain's routes are the ledger's, so a node that does not answer still leaves them listed.
@@ -426,6 +438,9 @@ export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<stri
   }))));
   const sources = await Promise.all(
     cfg.sources.map(async ({ chain, accounts, exec: urls }): Promise<ChainStatus> => {
+      // Read from Telos, so known even when the chain itself does not answer:
+      // a route whose vault could not be read is still listed, with the reason.
+      const listed = routesOf(ledger, String(chain.chainId), chain.vault);
       const base: ChainStatus = {
         id: chain.id,
         name: chain.name,
@@ -440,15 +455,12 @@ export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<stri
         upkeep: null,
         // From the registry alone, so it is the same answer whether or not the
         // chain can be reached right now.
-        timing: { deposit: depositEta(chain), withdrawal: withdrawalEta(chain) },
+        timing: timingOf(chain, listed),
         active: { deposits: false, withdrawals: false, reason: 'status not read yet' },
         deposits: { supported: true },
         routes: [],
         swaps: evmSwapsView(chain.id),
       };
-      // Read from Telos, so known even when the chain itself does not answer:
-      // a route whose vault could not be read is still listed, with the reason.
-      const listed = routesOf(ledger, String(chain.chainId), chain.vault);
       try {
         const exec = execFor(urls);
         const [head, top, upkeep, paused] = await Promise.all([

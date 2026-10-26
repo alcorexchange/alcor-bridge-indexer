@@ -133,6 +133,29 @@ export function depositEta(chain: EvmChain): Eta {
 }
 
 /**
+ * How long a deposit on the fast path waits: the route's confirmations on top of
+ * the block, and the push. Null where no route has one, or where finality comes
+ * as soon — a fast proof then saves nobody anything.
+ *
+ * Measured 2026-10-26 on mainnet, from the bridge's own activity: Ethereum →
+ * Telos deposits under the fast-path ceiling took 163–173 s (19 transfers, a
+ * median of 170) — twelve 12-second slots and the relayer's half-minute. A
+ * missed slot stretches a block, so the slowest case allows half as many again.
+ */
+export function depositFastEta(chain: EvmChain, confirmations: number): Eta | null {
+  if (confirmations <= 0) return null;
+  const blocks = confirmations * chain.blockTime;
+  const fast = eta(
+    [
+      { what: `${confirmations} ${chain.name} blocks on top of the deposit`, span: { min: blocks, typical: blocks, max: blocks * 1.5 } },
+      { what: RELAY_WHAT, span: RELAY },
+    ],
+    true,
+  );
+  return fast.seconds < depositEta(chain).seconds ? fast : null;
+}
+
+/**
  * How long a withdrawal takes, from the burn on Telos to tokens on this chain.
  *
  * Short everywhere, and for one reason: the slow half of a crossing is always

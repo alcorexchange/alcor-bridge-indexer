@@ -127,7 +127,7 @@ means different things in the two directions.
 
 | | ready after | when |
 |---|---|---|
-| `fast` | the route's `min_confirmations` — about 2.4 minutes at twelve on Ethereum | the route accepts unfinalized proofs and the depth is there |
+| `fast` | the route's `min_confirmations` — about 2.4 minutes at twelve on Ethereum; the whole wait is `/v1/chains` → `timing.depositFast` | the route accepts unfinalized proofs and the depth is there |
 | `finalized` | the source chain's own figure, from `/v1/chains` → `timing.deposit` | always, once the block finalizes |
 
 `null` when neither is available yet. The finalized wait is **per chain** and the

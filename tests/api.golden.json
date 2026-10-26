@@ -1532,6 +1532,25 @@
        ],
        "measured": true,
        "human": "about 55 s (13 s–2 min)"
+      },
+      "depositFast": {
+       "seconds": 174,
+       "range": [
+        144,
+        276
+       ],
+       "parts": [
+        {
+         "what": "12 Ethereum blocks on top of the deposit",
+         "seconds": 144
+        },
+        {
+         "what": "the relayer picks the finished proof up",
+         "seconds": 30
+        }
+       ],
+       "measured": true,
+       "human": "about 3 min (2 min–5 min)"
       }
      },
      "active": {
