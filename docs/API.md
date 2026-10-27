@@ -447,8 +447,9 @@ deployed, and then that leg does not exist.
     "payoutTx": "…", "closedTx": "…" }
   ```
 
-  `status` is `swapping`, `swapped`, `unread`, `late`, `expired` or
-  `cancelled`. `paid` says what was delivered where. `onward` lists the
+  `status` is `swapping`, `swapped`, `unread`, `late`, `expired`,
+  `cancelled`, `over cap` or `returned` (a market order the executor gave up
+  on). `paid` says what was delivered where. `onward` lists the
   withdrawals that carry a delivery to a leg on — follow `/v1/transfers/w:412`
   for the rest of the journey, including the release on an EVM chain; it is
   empty for a delivery on the order's own chain, and until the indexer has
@@ -1007,7 +1008,14 @@ deposit it names the withdrawal that carried it on; on a withdrawal, the deposit
 }
 ```
 
-On a withdrawal the second field is `"from": "d:1:42"` instead of `next`.
+On a withdrawal the second field is `"from": "d:1:42"` instead of `next`. A
+withdrawal a `route.alcor` order sent on Telos — the token bought, or the one
+that arrived going back — also names the order, how it ended (a `swap.status`)
+and the deposit that paid it in; `order` is null on any other leg:
+
+```json
+"order": { "chain": "telos", "id": 9, "status": "expired", "deposit": "d:56:9" }
+```
 
 ### `GET /v1/routes`
 

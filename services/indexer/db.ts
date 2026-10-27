@@ -345,6 +345,7 @@ export class Store {
       CREATE INDEX IF NOT EXISTS transfers_evm     ON transfers (evm_address, src_time DESC);
       CREATE INDEX IF NOT EXISTS transfers_status  ON transfers (status, src_time DESC);
       CREATE INDEX IF NOT EXISTS transfers_time    ON transfers (src_time DESC);
+      CREATE INDEX IF NOT EXISTS transfers_dst     ON transfers (dst_tx);
 
       -- Deliberately outside every sweep. A proof is two kilobytes, withdrawals
       -- are rare, and losing one means burned tokens with no way to finish the
@@ -471,6 +472,7 @@ export class Store {
         PRIMARY KEY (chain, id)
       );
       CREATE INDEX IF NOT EXISTS swaps_payout ON swaps (payout_tx);
+      CREATE INDEX IF NOT EXISTS swaps_closed ON swaps (closed_tx);
 
       -- Our own history of the Antelope chains: the few actions the indexer
       -- reads, kept as the state-history stream hands them over (actions.ts).
@@ -943,6 +945,18 @@ export class Store {
   /** The order a payout made, by the payout's transaction. */
   swapByPayout(tx: string): SwapRow | undefined {
     return this.db.prepare('SELECT * FROM swaps WHERE payout_tx = ?').get(tx) as SwapRow | undefined;
+  }
+
+  /** The orders a transaction ended. */
+  swapsClosedIn(tx: string): SwapRow[] {
+    return this.db.prepare('SELECT * FROM swaps WHERE closed_tx = ? ORDER BY id').all(tx) as SwapRow[];
+  }
+
+  /** The deposit a transaction on Telos paid out: the one whose `dst_tx` it is. */
+  depositPaidIn(tx: string): TransferRow | undefined {
+    return this.db
+      .prepare(`SELECT * FROM transfers WHERE direction = 'deposit' AND dst_tx = ?`)
+      .get(tx) as TransferRow | undefined;
   }
 
   // --- actions ------------------------------------------------------------------

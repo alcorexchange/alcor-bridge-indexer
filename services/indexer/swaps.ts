@@ -22,7 +22,7 @@
  */
 
 import { ANTELOPE_SWAPS } from '../../src/chains/swaps.ts';
-import type { ChainAction, Store, SwapPayment, SwapRow } from './db.ts';
+import type { ChainAction, HopRow, Store, SwapPayment, SwapRow } from './db.ts';
 
 /** bridgeroute's account on `chain`, if it is deployed there. */
 export const routeOf = (chain: string): string | undefined => ANTELOPE_SWAPS[chain]?.route;
@@ -97,8 +97,10 @@ export function applySwapActions(store: Store, chain: string, actions: ChainActi
  *   late       it arrived past its deadline; delivered to `back` as it arrived
  *   expired    no route paid the least by the deadline; delivered to `back` as it arrived
  *   cancelled  the account `back` names took it as it arrived
+ *   over cap   a market order of a token not listed, or over its cap; delivered to `back` as it arrived
+ *   returned   a market order the executor gave up on before its deadline; delivered to `back` as it arrived
  */
-export type SwapStatus = 'swapping' | 'swapped' | 'unread' | 'late' | 'expired' | 'cancelled';
+export type SwapStatus = 'swapping' | 'swapped' | 'unread' | 'late' | 'expired' | 'cancelled' | 'over cap' | 'returned';
 
 export type SwapView = {
   chain: string;
@@ -130,6 +132,8 @@ const WHY: Record<string, string> = {
   late: 'it arrived past its deadline',
   expired: 'no route paid the least by the deadline',
   cancelled: 'cancelled by the account it goes back to',
+  'over cap': 'it is over what a market order takes',
+  returned: 'no swap was found for it in time',
 };
 
 /** `4033.1234 TLM` out of `4033.1234 TLM@alien.worlds`. */
@@ -173,3 +177,28 @@ export const swapOfPayout = (store: Store, tx: string | null | undefined): SwapV
   const onward = row.closed_tx && paid(row).some((p) => isLeg(p.to)) ? store.withdrawalsOpenedIn(row.closed_tx) : [];
   return swapView(row, onward);
 };
+
+/** The order whose ending sent a hop out, and the deposit that paid that order in. */
+export type HopOrder = { chain: string; id: number; status: SwapStatus; deposit: string | null };
+
+/** A recipient as both a memo and the hop contract may spell it: an EVM address with or without `0x`, in any case. */
+const bare = (recipient: string): string => recipient.toLowerCase().replace(/^0x/, '');
+
+/**
+ * The order whose ending sent `hop` out: a swap's delivery to another chain, or
+ * the token that arrived going back. The order delivers to a leg in the
+ * transaction that ends it, and the hop opens there. Null for a hop a deposit
+ * or a way back opened, and where that transaction ended more than one order
+ * delivering to the same place: which one this is cannot be told.
+ */
+export function orderOf(store: Store, hop: HopRow): HopOrder | null {
+  const delivering = store.swapsClosedIn(hop.tx).filter((row) =>
+    paid(row).some((p) => {
+      const [domain, recipient] = p.to.split(':');
+      return isLeg(p.to) && domain === hop.to_domain && bare(recipient) === bare(hop.to_recipient);
+    }),
+  );
+  if (delivering.length !== 1) return null;
+  const [row] = delivering;
+  return { chain: row.chain, id: row.id, status: row.outcome as SwapStatus, deposit: store.depositPaidIn(row.payout_tx)?.key ?? null };
+}

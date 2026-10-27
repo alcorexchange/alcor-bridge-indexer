@@ -15,7 +15,7 @@
 
 import { withdrawalKey, type HopRow, type Store, type TransferRow } from './db.ts';
 import { transferProgress, type Progress, type ProgressContext } from './progress.ts';
-import { swapOfPayout } from './swaps.ts';
+import { orderOf, swapOfPayout, type HopOrder } from './swaps.ts';
 
 /** One end of a leg, with the chain's registry id where this build knows the domain. */
 export type Place = { domain: string; recipient: string; chain: string | null };
@@ -30,6 +30,11 @@ export type HopLink = {
   from?: string | null;
   to: Place;
   back: Place;
+  /**
+   * On a withdrawal a bridgeroute order sent: that order, how it ended, and the
+   * deposit that paid it in. Null for any other leg.
+   */
+  order?: HopOrder | null;
 };
 
 /**
@@ -102,6 +107,7 @@ export function hopLink(store: Store, row: TransferRow, chainOf: ChainOf): HopLi
     from: h.prev !== null ? withdrawalKey(h.prev) : h.deposit,
     to: place(h.to_domain, h.to_recipient, chainOf),
     back: place(h.back_domain, h.back_recipient, chainOf),
+    order: h.prev === null ? orderOf(store, h) : null,
   };
 }
 

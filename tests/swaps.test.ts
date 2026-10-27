@@ -13,6 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { Store, type ChainAction } from '../services/indexer/db.ts';
 import { applySwapActions, swapOfPayout, wellFormedOpened } from '../services/indexer/swaps.ts';
+import { hopLink } from '../services/indexer/hops.ts';
 import { evmSwapQuote, QuoteRefused } from '../services/indexer/quote.ts';
 
 const action = (name: string, trx: string, timestamp: string, data: Record<string, unknown>): ChainAction => ({
@@ -91,6 +92,37 @@ test('a swap on Telos delivered to another chain names the withdrawal that carri
   assert.equal(swapped.summary, 'delivered as 99.700000 USDT');
   assert.deepEqual(swapped.paid, [{ to: BSC, asset: '99.700000 USDT@wrap.alcor' }]);
   assert.deepEqual(swapped.onward, ['w:300']);
+});
+
+test('a leg a Telos order sent names the order, how it ended, and the deposit that paid it in', () => {
+  const store = new Store(':memory:');
+  const OWNER = '0x5b38da6a701c568545dcfcb03fcb875f56beddc4';
+  const REFUND = '0xab8483f64d9c6d1ecf9b849ae677dd3315835cb2';
+  store.upsertTransfer({
+    key: 'd:56:9', direction: 'deposit', ref: 9, status: 'forwarded', account: 'route.alcor', evm_address: '0x1111111111111111111111111111111111111111',
+    domain: '56', amount: '50000000', src_block: 5, src_time: 900, src_tx: 'bsc9', dst_tx: 'forward9',
+  });
+  const leg = (id: number, recipient: string, tx: string, prev: number | null = null) => {
+    store.putHop({
+      id, prev, deposit: null, quantity: '50.000000 USDC', to_domain: '56', to_recipient: recipient,
+      back_domain: '56', back_recipient: recipient, tx, block: 10, at: 1000,
+    });
+    store.upsertTransfer({
+      key: `w:${id}`, direction: 'withdrawal', ref: id, status: 'burned', account: 'hop.alcor', evm_address: recipient,
+      domain: '56', amount: '50000000', src_block: 10, src_time: 1000, src_tx: tx,
+    });
+    return hopLink(store, store.getTransfer(`w:${id}`)!, () => 'bsc')!;
+  };
+  applySwapActions(store, 'telos', [
+    opened(9, 'forward9', `56:${OWNER}`, `56:${REFUND}`),
+    closed(9, 'exec9', 'expired', [USDC('50.000000')], `56:${REFUND}`),
+    // Another order ended in the same transaction, delivering somewhere else.
+    closed(10, 'exec9', 'swapped', [USDC('7.000000')], `56:${OWNER}`),
+  ]);
+  assert.deepEqual(leg(400, REFUND.slice(2).toUpperCase(), 'exec9').order, { chain: 'telos', id: 9, status: 'expired', deposit: 'd:56:9' });
+  assert.equal(leg(401, '0x2222222222222222222222222222222222222222', 'exec9').order, null, 'no order there delivered to it');
+  assert.equal(leg(402, REFUND, 'other').order, null, 'no order ended in its transaction');
+  assert.equal(leg(403, REFUND, 'recover403', 400).order, null, 'a way back is no order\'s');
 });
 
 test('a swaps table from before legs is dropped, and its cursors skip the old actions', () => {
