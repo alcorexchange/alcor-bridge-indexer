@@ -92,18 +92,22 @@ function chainKind(chain: string | null): 'antelope' | 'evm' | null {
 }
 
 /**
- * `/v1/chains`, shared for fifteen seconds.
+ * `/v1/chains`, shared for a minute.
  *
  * Each computation reads every vault on its own chain — balances, limits, the
  * asset's flags, the pause bits, the head — and some of those chains are read
  * through a paid endpoint. Uncached, every visitor's page load was a dozen
- * billed calls; shared, the cost is fixed whatever the traffic. Nothing here
- * decides how fast a crossing goes: it is the page's view of the routes.
+ * billed calls; shared, the cost is fixed whatever the traffic. Every API
+ * request asks for it (the holds of waiting withdrawals read the vaults' daily
+ * limits from it), and `close` asks every three seconds, so the lifetime here
+ * is how often it is computed at all: fifteen seconds was 400k calls a day.
+ * Nothing here decides how fast a crossing goes: it is the page's view of the
+ * routes, and a limit or a balance moves on a crossing, minutes apart.
  */
 let statusMemo: (() => Promise<Awaited<ReturnType<typeof chainsStatus>>>) | undefined;
 export function status(deps: Deps) {
   statusMemo ??= memo(
-    ({ sources }) => (allRead(sources as any[]) ? 15_000 : RETRY_PARTIAL_MS),
+    ({ sources }) => (allRead(sources as any[]) ? STATUS_MS : RETRY_PARTIAL_MS),
     async () => {
       const read = await chainsStatus(deps.cfg, { ...deps.savanna.state }, deps.keepers);
       rememberOutflows(read.sources as any[]);
@@ -113,11 +117,16 @@ export function status(deps: Deps) {
   return statusMemo();
 }
 
+/** How long a complete `/v1/chains` is kept. */
+const STATUS_MS = 60_000;
+
 /**
  * How long a read with a chain missing is kept. A DNS lookup that stalls for
  * five seconds fails every endpoint at once; the next read usually succeeds.
+ * Not shorter: one chain down for an hour would otherwise re-read every other
+ * chain's vaults every few seconds of it.
  */
-const RETRY_PARTIAL_MS = 5_000;
+const RETRY_PARTIAL_MS = 15_000;
 
 /** Whether every chain and every vault in `/v1/chains` answered. */
 const allRead = (sources: { error?: string; routes?: { outflowError?: string }[] }[]): boolean =>

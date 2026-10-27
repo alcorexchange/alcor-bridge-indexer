@@ -24,6 +24,7 @@ import { hexToName } from '../../src/proof/pack.ts';
 import type { BlockrootKeeper } from './blockroot.ts';
 import { assetOfRoute } from './fast.ts';
 import { execFor, selector, type Exec } from '../../src/evm/exec.ts';
+import { multicall, nativeBalanceCall, word, type Call } from '../../src/evm/multicall.ts';
 import { antelopeRpc, getTableRows } from '../../src/net/antelope.ts';
 import { SETTLEMENT_CHAIN, type AntelopeConfig, type IndexerConfig, type NearConfig, type SuiConfig } from './config.ts';
 import { nearVaultState } from '../../src/near/client.ts';
@@ -171,100 +172,114 @@ export async function upkeepOf(
   return null;
 }
 
-/**
- * Whether the vault itself is halted, read from the vault.
- *
- * The bridge's own `routes` table cannot answer this: it lives on Telos, and a
- * guardian pausing a vault on the far side never touches it. Tested on BSC
- * testnet — `halt()` from a guardian key stopped both directions while every
- * Telos-side flag stayed open — so a status that skipped this would have shown a
- * halted chain as active.
- *
- * Null when the vault cannot be reached, which is not the same as "not paused"
- * and is reported as its own state.
- */
-async function vaultPaused(
-  exec: Exec,
-  vault: string,
-): Promise<{ deposits: boolean; withdrawals: boolean } | null> {
-  try {
-    const [d, w] = await Promise.all([
-      exec.rpc('eth_call', [{ to: vault, data: selector('depositsPaused()') }, 'latest']),
-      exec.rpc('eth_call', [{ to: vault, data: selector('withdrawalsPaused()') }, 'latest']),
-    ]);
-    return { deposits: BigInt(d) === 1n, withdrawals: BigInt(w) === 1n };
-  } catch {
-    return null;
-  }
-}
-
 /** 2^256 − 1: what `AlcorVault.available` answers for a token with no limit. */
 const UNLIMITED_OUTFLOW = (1n << 256n) - 1n;
 
+/** The reads per route in `readVault`'s multicall, in this order: available, limits, assets, balance. */
+const ROUTE_READS = 4;
+
 /**
- * Each route with what its vault will still let out today, and the largest
- * withdrawal that can be paid out right now.
+ * The vault as `/v1/chains` shows it: whether it is halted, and each route with
+ * what it will still let out today. One `eth_call` for all of it, through
+ * Multicall3; each read keeps its own success flag.
+ *
+ * Halted is read from the vault itself. The bridge's own `routes` table cannot
+ * answer it: it lives on Telos, and a guardian pausing a vault on the far side
+ * never touches it. Tested on BSC testnet — `halt()` from a guardian key stopped
+ * both directions while every Telos-side flag stayed open — so a status that
+ * skipped this would have shown a halted chain as active. `paused` is null when
+ * the vault cannot be read, which is not the same as "not paused" and is
+ * reported as its own state.
  *
  * Telos knows `backing` and `maxWithdrawal`; the vault's daily limit lives only
  * in the vault. A withdrawal over what is left of it is still accepted on Telos
  * and then waits on the far side for the limit to refill — so a front end that
  * showed only `available` would promise a payout that is not coming today.
- *
  * `outflowLeft` is canonical units, rounded down, or null when the token has no
- * limit. When the vault cannot be read, `outflowError` says why and there is no
+ * limit. When a route cannot be read, `outflowError` says why and there is no
  * `withdrawableNow`: unknown is not the same as unlimited.
  */
-async function withOutflow<
+async function readVault<
   R extends { token: string | null; scale: string; available: string | null; maxWithdrawal: string },
 >(exec: Exec, vault: string, routes: R[]) {
   const NATIVE = '0x' + '0'.repeat(40);
-  return Promise.all(
-    routes.map(async (r) => {
-      try {
-        const token = r.token;
-        if (token === null) throw new Error('a route on an EVM vault names no ERC-20');
-        const arg = token.slice(2).toLowerCase().padStart(64, '0');
-        const vaultArg = vault.slice(2).toLowerCase().padStart(64, '0');
-        const scale = BigInt(r.scale);
-        const word = (hex: string, i: number) => BigInt('0x' + String(hex).slice(2 + i * 64, 2 + (i + 1) * 64));
-        const [available, limit, asset, balance] = await Promise.all([
-          exec.rpc('eth_call', [{ to: vault, data: selector('available(address)') + arg }, 'latest']),
-          exec.rpc('eth_call', [{ to: vault, data: selector('limits(address)') + arg }, 'latest']),
-          exec.rpc('eth_call', [{ to: vault, data: selector('assets(address)') + arg }, 'latest']),
-          // What the vault holds is its balance, which is what the cap is checked against.
-          token.toLowerCase() === NATIVE
-            ? exec.rpc('eth_getBalance', [vault, 'latest'])
-            : exec.rpc('eth_call', [{ to: token, data: selector('balanceOf(address)') + vaultArg }, 'latest']),
-        ]);
-        const raw = BigInt(available);
-        const left = raw === UNLIMITED_OUTFLOW ? null : raw / scale;
-        // `limits(token)` is (used, updated, perPeriod); `assets(token)` is
-        // (scale, minDeposit, enabled, cap). Raw units both, scaled down here.
-        const perPeriod = word(limit, 2);
-        const cap = word(asset, 3);
-        const held = BigInt(balance) / scale;
-        const room = cap === 0n ? null : cap / scale - held;
-        return {
-          ...r,
-          /** The vault's daily allowance for this token, canonical units; null when unmetered. */
-          outflowPerDay: perPeriod === UNLIMITED_OUTFLOW ? null : (perPeriod / scale).toString(),
-          outflowLeft: left === null ? null : left.toString(),
-          withdrawableNow: withdrawableNow(r, left),
-          /** The vault's own cap on what it holds of this token; null when uncapped. */
-          vaultCap: cap === 0n ? null : (cap / scale).toString(),
-          /** What it holds now, its balance. */
-          vaultHeld: held.toString(),
-          /** The most one deposit can add before the vault refuses `CapExceeded`; null when uncapped. */
-          depositableNow: room === null ? null : (room < 0n ? 0n : room).toString(),
-          vaultEnabled: word(asset, 2) === 1n,
-          /** The vault's own floor, canonical units: under it the vault refuses `BelowMinimum`. */
-          vaultMinDeposit: word(asset, 1).toString(),
-        };
-      } catch (err) {
-        return { ...r, outflowError: (err as Error).message };
+  const calls: Call[] = [
+    { to: vault, data: selector('depositsPaused()') },
+    { to: vault, data: selector('withdrawalsPaused()') },
+  ];
+  for (const { token } of routes) {
+    if (token === null) continue;
+    const arg = word(token);
+    calls.push(
+      { to: vault, data: selector('available(address)') + arg },
+      { to: vault, data: selector('limits(address)') + arg },
+      { to: vault, data: selector('assets(address)') + arg },
+      // What the vault holds is its balance, which is what the cap is checked against.
+      token.toLowerCase() === NATIVE ? nativeBalanceCall(vault) : { to: token, data: selector('balanceOf(address)') + word(vault) },
+    );
+  }
+
+  let answers: (string | null)[];
+  try {
+    answers = await multicall(exec, calls);
+  } catch (err) {
+    const message = (err as Error).message;
+    return { paused: null, routes: routes.map((r) => ({ ...r, outflowError: message })) };
+  }
+
+  const [deposits, withdrawals] = answers;
+  const paused = deposits === null || withdrawals === null
+    ? null
+    : { deposits: BigInt(deposits) === 1n, withdrawals: BigInt(withdrawals) === 1n };
+  let at = 2;
+  const read = routes.map((r) => {
+    if (r.token === null) return { ...r, outflowError: 'a route on an EVM vault names no ERC-20' };
+    const [available, limit, asset, balance] = answers.slice(at, (at += ROUTE_READS));
+    try {
+      if (available === null || limit === null || asset === null || balance === null) {
+        throw new Error(`a read of the vault for ${r.token} reverted`);
       }
-    }),
-  );
+      return { ...r, ...outflowOf(r, available, limit, asset, balance) };
+    } catch (err) {
+      return { ...r, outflowError: (err as Error).message };
+    }
+  });
+  return { paused, routes: read };
+}
+
+/** One route's limits from its four answers, raw units scaled down to canonical. */
+function outflowOf(
+  r: { scale: string; available: string | null; maxWithdrawal: string },
+  available: string,
+  limit: string,
+  asset: string,
+  balance: string,
+) {
+  const scale = BigInt(r.scale);
+  const field = (hex: string, i: number) => BigInt('0x' + hex.slice(2 + i * 64, 2 + (i + 1) * 64));
+  const raw = BigInt(available);
+  const left = raw === UNLIMITED_OUTFLOW ? null : raw / scale;
+  // `limits(token)` is (used, updated, perPeriod); `assets(token)` is
+  // (scale, minDeposit, enabled, cap). Raw units both, scaled down here.
+  const perPeriod = field(limit, 2);
+  const cap = field(asset, 3);
+  const held = BigInt(balance) / scale;
+  const room = cap === 0n ? null : cap / scale - held;
+  return {
+    /** The vault's daily allowance for this token, canonical units; null when unmetered. */
+    outflowPerDay: perPeriod === UNLIMITED_OUTFLOW ? null : (perPeriod / scale).toString(),
+    outflowLeft: left === null ? null : left.toString(),
+    withdrawableNow: withdrawableNow(r, left),
+    /** The vault's own cap on what it holds of this token; null when uncapped. */
+    vaultCap: cap === 0n ? null : (cap / scale).toString(),
+    /** What it holds now, its balance. */
+    vaultHeld: held.toString(),
+    /** The most one deposit can add before the vault refuses `CapExceeded`; null when uncapped. */
+    depositableNow: room === null ? null : (room < 0n ? 0n : room).toString(),
+    vaultEnabled: field(asset, 2) === 1n,
+    /** The vault's own floor, canonical units: under it the vault refuses `BelowMinimum`. */
+    vaultMinDeposit: field(asset, 1).toString(),
+  };
 }
 
 /**
@@ -463,13 +478,14 @@ export async function chainsStatus(cfg: IndexerConfig, savannaState: Record<stri
       };
       try {
         const exec = execFor(urls);
-        const [head, top, upkeep, paused] = await Promise.all([
+        const [head, top, upkeep, vault] = await Promise.all([
           exec.head(),
           provedTop(cfg, accounts.lightClient),
           upkeepOf(cfg, chain, accounts),
-          chain.vault ? vaultPaused(exec, chain.vault) : null,
+          chain.vault ? readVault(exec, chain.vault, listed) : null,
         ]);
-        const routes = chain.vault ? await withOutflow(exec, chain.vault, listed) : listed;
+        const paused = vault?.paused ?? null;
+        const routes = vault?.routes ?? listed;
         return {
           ...base,
           head,

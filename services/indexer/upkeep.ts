@@ -229,6 +229,8 @@ async function recentFinalizers(
 
 /** A key's held weight never changes within a held generation, so it is read once per generation. */
 const weightCache = new Map<string, number>();
+/** Nor do the threshold and the total weight: installed with the generation. */
+const quorumCache = new Map<string, { threshold: number; total: number }>();
 
 /**
  * The held seats' weight among finalizers seen within the day, against the
@@ -245,7 +247,14 @@ async function heldQuorum(
 ): Promise<NonNullable<NonNullable<ChainUpkeep['policy']>['quorum']>> {
   const read = async (signature: string, arg = '') =>
     Number(BigInt(await exec.rpc('eth_call', [{ to: lightClient, data: selector(signature) + arg }, 'latest'])));
-  const [threshold, total] = await Promise.all([read('threshold()'), read('coreTotalWeight()')]);
+  const generationKey = `${lightClient.toLowerCase()}:${held}`;
+  let weights = quorumCache.get(generationKey);
+  if (!weights) {
+    const [threshold, total] = await Promise.all([read('threshold()'), read('coreTotalWeight()')]);
+    weights = { threshold, total };
+    quorumCache.set(generationKey, weights);
+  }
+  const { threshold, total } = weights;
   if (!recent.complete && recent.since <= held) return { threshold, present: total, spare: total - threshold };
 
   let present = 0;

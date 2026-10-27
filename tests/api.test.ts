@@ -23,6 +23,7 @@ import { antelopeChains, type IndexerConfig } from '../services/indexer/config.t
 import { Store, depositKey, voidKey, withdrawalKey } from '../services/indexer/db.ts';
 import { symbolCodeRaw } from '../services/indexer/fast.ts';
 import { EVM_CHAINS } from '../src/chains/evm.ts';
+import { MULTICALL3, word } from '../src/evm/multicall.ts';
 import { nameToUint64 } from '../src/proof/pack.ts';
 
 const GOLDEN = join(dirname(fileURLToPath(import.meta.url)), 'api.golden.json');
@@ -119,6 +120,14 @@ const EVM_HEADS: Record<string, number> = { 'eth.test': 1005, 'bsc.test': 50_000
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+/** Multicall3's answer to an `aggregate3` request: every call succeeds with four zero words, as a plain `eth_call` does here. */
+function multicallOfZeros(data: string): string {
+  const count = Number(BigInt('0x' + data.slice(10 + 64, 10 + 128)));
+  const element = word(1n) + word(0x40n) + word(128n) + '0'.repeat(256);
+  const offsets = Array.from({ length: count }, (_, i) => word(BigInt(32 * count + i * (element.length / 2)))).join('');
+  return '0x' + word(0x20n) + word(BigInt(count)) + offsets + element.repeat(count);
+}
+
 /** Telos and WAX by host, any JSON-RPC as an EVM node, and the API itself on 127.0.0.1. */
 function stubNodes(): () => void {
   const real = globalThis.fetch;
@@ -137,6 +146,8 @@ function stubNodes(): () => void {
     if (body?.jsonrpc) {
       const result =
         body.method === 'eth_blockNumber' ? '0x' + (EVM_HEADS[url.host] ?? 1005).toString(16)
+          : body.method === 'eth_call' && String(body.params[0].to).toLowerCase() === MULTICALL3.toLowerCase()
+            ? multicallOfZeros(body.params[0].data)
           : body.method === 'eth_call' ? '0x' + '0'.repeat(256)
             : body.method === 'eth_getBalance' ? '0x0'
               : null;

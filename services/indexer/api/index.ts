@@ -91,7 +91,7 @@ async function handle(deps: Deps, req: IncomingMessage, res: ServerResponse): Pr
   // a new token" amounts to.
   await warmListings(deps.cfg).catch(() => undefined);
   // The vaults' daily limits, for a withdrawal waiting on one (`holds.ts`).
-  // Not awaited: a row renders with the last reading, shared for fifteen seconds.
+  // Not awaited: a row renders with the last reading, shared for a minute.
   status(deps).catch(() => undefined);
 
   // The prefix is served here rather than stripped by a proxy, so the path in a

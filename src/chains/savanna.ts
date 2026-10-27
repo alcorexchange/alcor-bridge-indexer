@@ -222,6 +222,13 @@ export const SETTLEMENT_CHAIN = 'telos';
 
 export const ACTIVE_SAVANNA_CHAIN = process.env.SAVANNA_CHAIN ?? 'telos-production';
 
+/**
+ * A chain from the registry, with the deployment's `TELOS_RPC` over its
+ * endpoints when it is the active one — the way `EXEC_URLS_<chainId>` overrides
+ * an EVM chain's. Without it every relayer read and pushed through the public
+ * endpoints even with a node on the host: `close` alone asked one every three
+ * seconds.
+ */
 export function savannaChain(id: string = ACTIVE_SAVANNA_CHAIN): SavannaChain {
   const c = SAVANNA_CHAINS[id];
   if (!c) {
@@ -229,7 +236,8 @@ export function savannaChain(id: string = ACTIVE_SAVANNA_CHAIN): SavannaChain {
       `unknown Savanna chain '${id}'. Known: ${Object.keys(SAVANNA_CHAINS).join(', ')}`,
     );
   }
-  return c;
+  const rpc = (process.env.TELOS_RPC ?? '').split(',').map((u) => u.trim()).filter(Boolean);
+  return id === ACTIVE_SAVANNA_CHAIN && rpc.length ? { ...c, rpc } : c;
 }
 
 /** A block_timestamp slot for this chain. Never call this without a chain. */
