@@ -34,6 +34,7 @@ import { BeaconClient } from '../../src/evm/beacon.ts';
 import { updateFromBlocks, slotForTimestamp, ancestryOfLength } from '../../src/evm/fromBlocks.ts';
 import { buildProofBundle } from '../../src/evm/proofBundle.ts';
 import { CheckpointProver } from './checkpoint.ts';
+import { RetryLater } from './retryLater.ts';
 import { ParliaProver } from '../../src/bsc/parlia.ts';
 import { MilestoneProver } from './milestone.ts';
 import type { Frozen, LogToFreeze, Prover } from '../../src/proof/prover.ts';
@@ -138,6 +139,8 @@ export class EvmFollower {
    * refund. Only the topic and the action it feeds differ.
    */
   private awaitingFinality = new Map<string, PendingLog>();
+  /** A freeze that failed waits before the next try, instead of retrying every poll. */
+  private readonly freezeRetry = new RetryLater();
 
   readonly state: EvmState = {
     at: 0, head: 0, caughtUp: false, deposits: 0, frozen: 0, roots: 0, lastError: null,
@@ -647,15 +650,18 @@ export class EvmFollower {
         this.awaitingFinality.delete(key);
         continue;
       }
+      if (!this.freezeRetry.due(key)) continue;
       try {
         const slot = slotForTimestamp(await this.blockTime(p.block));
         if (finalSlot < slot) continue; // still inside the ~13-minute window
 
         await this.recordFrozen(p, await this.freezeLog(p, slot, finalSlot, finality));
         this.awaitingFinality.delete(key);
+        this.freezeRetry.succeeded(key);
       } catch (err) {
         this.store.incident('log-freeze', `${key}: ${(err as Error).message}`);
-        console.log(`[evm:${this.chain.id}] freeze failed for ${key}: ${(err as Error).message}`);
+        const wait = this.freezeRetry.failed(key);
+        console.log(`[evm:${this.chain.id}] freeze failed for ${key}, next try in ${Math.round(wait / 1000)} s: ${(err as Error).message}`);
         // A chain too long to prove will not get shorter. Stop retrying it every
         // poll and leave it as an incident somebody can act on.
         if ((err as Error).message.includes('too far behind')) this.awaitingFinality.delete(key);
@@ -687,12 +693,15 @@ export class EvmFollower {
         continue;
       }
       if (p.block > mature) continue;
+      if (!this.freezeRetry.due(key)) continue;
       try {
         await this.recordFrozen(p, await prover.freeze(p));
         this.awaitingFinality.delete(key);
+        this.freezeRetry.succeeded(key);
       } catch (err) {
         this.store.incident('log-freeze', `${key}: ${(err as Error).message}`);
-        console.log(`[evm:${this.chain.id}] freeze failed for ${key}: ${(err as Error).message}`);
+        const wait = this.freezeRetry.failed(key);
+        console.log(`[evm:${this.chain.id}] freeze failed for ${key}, next try in ${Math.round(wait / 1000)} s: ${(err as Error).message}`);
       }
     }
   }

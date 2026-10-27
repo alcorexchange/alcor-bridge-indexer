@@ -16,7 +16,7 @@
 import { antelopeRpc } from '../net/antelope.ts';
 import { proveReceipt } from '../evm/receiptProof.ts';
 import { activeExec, type Exec } from '../evm/exec.ts';
-import { jsonRpcAny } from '../net/fetchJson.ts';
+import { execRpc } from '../evm/exec.ts';
 import { hexToBytes } from './header.ts';
 import { proverootArgs } from './proof.ts';
 import { bare } from '../proof/hex.ts';
@@ -156,7 +156,7 @@ export async function epochBacklog(cfg: ParliaTarget): Promise<EpochBacklog | nu
   if (!newest) return null;
 
   const stored = newest.epoch;
-  const chainHead = Number(BigInt(await jsonRpcAny(cfg.evm.exec, 'eth_blockNumber', [])));
+  const chainHead = Number(BigInt(await execRpc('eth_blockNumber', [], cfg.evm.exec)));
   const head = Math.floor(chainHead / epochLength) * epochLength;
   return { stored, head, lag: Math.max(0, (head - stored) / epochLength) };
 }

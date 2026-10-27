@@ -12,7 +12,7 @@
 import { RLP } from '@ethereumjs/rlp';
 import { keccak_256 } from '@noble/hashes/sha3';
 
-import { jsonRpcAny } from '../net/fetchJson.ts';
+import { execRpc } from '../evm/exec.ts';
 
 export type RpcBlock = Record<string, any>;
 
@@ -120,7 +120,7 @@ export function encodeHeader(block: RpcBlock): EncodedHeader {
 /** Fetch one block and re-encode its header. */
 export async function fetchHeader(urls: string[], block: number | string): Promise<EncodedHeader> {
   const tag = typeof block === 'number' ? '0x' + block.toString(16) : block;
-  const json = await jsonRpcAny(urls, 'eth_getBlockByNumber', [tag, false]);
+  const json = await execRpc('eth_getBlockByNumber', [tag, false], urls);
   if (!json) throw new Error(`no block ${tag}`);
   return encodeHeader(json);
 }

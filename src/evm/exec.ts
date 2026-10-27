@@ -17,23 +17,32 @@
  */
 import { keccak_256 } from '@noble/hashes/sha3';
 
-import { jsonRpc, jsonRpcAny, HttpError } from '../net/fetchJson.ts';
+import { jsonRpc, HttpError } from '../net/fetchJson.ts';
 import { EXEC_URLS } from '../config.ts';
 
 /**
  * An endpoint that refused, and when it may be asked again.
  *
  * A gateway that answers 429 means it, and asking it again on the next poll is
- * how one refusal becomes a steady stream of them: the rotation exists for
- * redundancy, not for spreading a rate limit around. Parking costs exactly that
- * redundancy, which is why the wait is short and why an exhausted rotation
- * ignores it — a node that might refuse still beats no node at all.
+ * how one refusal becomes a steady stream of them. Parking costs redundancy,
+ * which is why the wait is short and why an exhausted rotation ignores it — a
+ * node that might refuse still beats no node at all.
+ *
+ * A rate limit is the endpoint's, so it parks the endpoint. A 401/403 is often
+ * the method's: publicnode serves BSC logs but answers a receipt a few blocks old
+ * with 403 "archive requests require a personal token", and parking the whole
+ * endpoint for that took it out of the log rotation for an hour. So a refusal
+ * parks the endpoint for that method only.
  */
 const parked = new Map<string, number>();
 
-function openEndpoints(urls: string[] = EXEC_URLS): string[] {
+const refusalKey = (url: string, method: string) => `${method} ${url}`;
+
+function openEndpoints(urls: string[], method: string): string[] {
   const now = Date.now();
-  const open = urls.filter((url) => (parked.get(url) ?? 0) <= now);
+  const isOpen = (url: string) =>
+    (parked.get(url) ?? 0) <= now && (parked.get(refusalKey(url, method)) ?? 0) <= now;
+  const open = urls.filter(isOpen);
   return open.length ? open : urls;
 }
 
@@ -50,20 +59,56 @@ function openEndpoints(urls: string[] = EXEC_URLS): string[] {
 const PARK_MS = 60_000;
 const PARK_REFUSED_MS = 60 * 60_000;
 
-function park(url: string, err: unknown): void {
+function park(url: string, method: string, err: unknown): void {
   if (!(err instanceof HttpError)) return;
   if (err.status === 401 || err.status === 403) {
-    parked.set(url, Date.now() + PARK_REFUSED_MS);
+    parked.set(refusalKey(url, method), Date.now() + PARK_REFUSED_MS);
   } else if (err.status === 429 || err.status >= 500) {
     parked.set(url, Date.now() + PARK_MS);
   }
 }
 
-export const execRpc = (
-  method: string,
-  params: unknown[],
-  urls: string[] = EXEC_URLS,
-): Promise<any> => jsonRpcAny(openEndpoints(urls), method, params);
+/**
+ * Where the next call to a list starts.
+ *
+ * Endpoints used to be asked in order, so every call went to the first until it
+ * refused, and the list drained free tiers one after another: on 2026-10-27 all
+ * four BSC archive providers were out of quota at once. Starting each call one
+ * endpoint further spreads the load over every open endpoint; the rest of the
+ * list still stands behind it as fallback.
+ */
+const turns = new Map<string, number>();
+
+function inTurn(urls: string[], method: string): string[] {
+  const open = openEndpoints(urls, method);
+  if (open.length < 2) return open;
+  const key = urls.join(' ');
+  const turn = turns.get(key) ?? 0;
+  turns.set(key, turn + 1);
+  const start = turn % open.length;
+  return [...open.slice(start), ...open.slice(0, start)];
+}
+
+/**
+ * One call, answered by the first endpoint in turn that has the data.
+ *
+ * `null` is not an answer: a node that pruned a receipt returns it, and the next
+ * node may still have it.
+ */
+export async function execRpc(method: string, params: unknown[], urls: string[] = EXEC_URLS): Promise<any> {
+  let lastError: unknown = null;
+  for (const url of inTurn(urls, method)) {
+    try {
+      const result = await jsonRpc(url, method, params);
+      if (result !== null && result !== undefined) return result;
+    } catch (err) {
+      lastError = err;
+      park(url, method, err);
+    }
+  }
+  if (lastError) throw lastError;
+  return null;
+}
 
 /**
  * The head every endpoint agrees exists.
@@ -75,12 +120,12 @@ export const execRpc = (
  */
 export async function execHead(urls: string[] = EXEC_URLS): Promise<number> {
   const heads: number[] = [];
-  for (const url of openEndpoints(urls)) {
+  for (const url of openEndpoints(urls, 'eth_blockNumber')) {
     try {
       heads.push(Number(await jsonRpc(url, 'eth_blockNumber', [])));
     } catch (err) {
       // A node that will not answer does not get a vote.
-      park(url, err);
+      park(url, 'eth_blockNumber', err);
     }
   }
   if (!heads.length) throw new Error('no execution endpoint answered eth_blockNumber');
@@ -107,6 +152,9 @@ export async function execHead(urls: string[] = EXEC_URLS): Promise<number> {
  * Either way an endpoint that errors while another answered is not a failure.
  * Heads drift by a block between nodes, and a scan that stops on the laggard's
  * complaint leaves settled crossings looking open.
+ *
+ * Taking endpoints in turn is safe here because `execHead` answers with the
+ * lowest head of all of them: every open endpoint already has the range asked.
  */
 export async function execLogs(
   filter: unknown,
@@ -116,7 +164,7 @@ export async function execLogs(
   let answered = false;
   let lastError: unknown = null;
 
-  for (const url of openEndpoints(urls)) {
+  for (const url of inTurn(urls, 'eth_getLogs')) {
     try {
       const logs = await jsonRpc(url, 'eth_getLogs', [filter]);
       if (!Array.isArray(logs)) continue;
@@ -124,7 +172,7 @@ export async function execLogs(
       if (logs.length || !opts.confirmEmpty) return logs;
     } catch (err) {
       lastError = err;
-      park(url, err);
+      park(url, 'eth_getLogs', err);
     }
   }
   if (!answered && lastError) throw lastError;
