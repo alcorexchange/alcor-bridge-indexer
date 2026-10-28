@@ -11,6 +11,7 @@ import type { ProgressContext } from '../services/indexer/progress.ts';
 import { decimalAmount, decimalUnits } from '../src/units.ts';
 import { antelopeDepositEta, antelopeWithdrawalEta } from '../src/chains/eta.ts';
 import { antelopeById } from '../src/chains/antelope.ts';
+import { chainKind } from '../services/indexer/api/cache.ts';
 
 const waxChain = antelopeById('wax')!;
 
@@ -40,7 +41,7 @@ const ctx: ActivityContext = {
   progress,
 };
 
-const kind = (c: string | null) => (c === 'mainnet' ? 'evm' : c === 'telos' || c === 'wax' ? 'antelope' : null);
+const kind = (c: string | null) => (c === 'mainnet' ? 'outside' : c === 'telos' || c === 'wax' ? 'antelope' : null);
 
 /** Ethereum -> Telos -> WAX: deposit 30 to the hop, carried on as withdrawal 7. */
 function hopEthToWax(store: Store, at: number, legStatus: 'burned' | 'released') {
@@ -225,6 +226,13 @@ test('the summary counts a hop once, by its ends, and moves no total for what ca
   assert.equal(week.transfers, 3);
   assert.equal(week.daily.length, 8);
   assert.equal(summary([], '24h', NOW, kind).duration, null);
+});
+
+test('Sui and NEAR are outside Antelope, as the EVM chains are', () => {
+  for (const c of ['mainnet', 'bsc', 'polygon', 'sui', 'near']) assert.equal(chainKind(c), 'outside', c);
+  for (const c of ['telos', 'wax', 'xpr', 'vaulta']) assert.equal(chainKind(c), 'antelope', c);
+  assert.equal(chainKind('nowhere'), null);
+  assert.equal(chainKind(null), null);
 });
 
 test('the feed pages by cursor and finds a party at either end', () => {

@@ -1491,10 +1491,11 @@ The same transfers as `/v1/activity`, counted and summed. A hop counts once.
 - Sums are per symbol, decimal strings, never added across symbols. No USD:
   price them yourself. A `returned` transfer counts in `transfers` and adds
   nothing to any sum — the money went back.
-- `toAntelope` came from an EVM chain into Telos or WAX; `fromAntelope` went
-  the other way; `net` is the difference. A transfer between two Antelope
-  chains (Telos → WAX) or two EVM chains moves neither, and counts only in
-  `transfers`.
+- `toAntelope` came from an outside chain (EVM, Sui, NEAR) into an Antelope
+  one (Telos, WAX, XPR, Vaulta); `fromAntelope` went the other way; `net` is
+  the difference, and matches `/v1/reserves` while nothing is in flight. A
+  transfer between two Antelope chains (Telos → WAX) or two outside ones moves
+  neither, and counts only in `transfers`.
 - `routes` by the two ends, Telos in the middle of a hop left out, busiest
   first. `daily` has every UTC day of the window, empty ones included, oldest
   first; for `all`, from the first transfer.

@@ -6,10 +6,12 @@
 
 import { EVM_CHAINS } from '../../../src/chains/evm.ts';
 import { antelopeById } from '../../../src/chains/antelope.ts';
+import { nearById } from '../../../src/chains/near.ts';
+import { suiById } from '../../../src/chains/sui.ts';
 import { BeaconClient } from '../../../src/evm/beacon.ts';
 import { antelopeRpc, getTableRows } from '../../../src/net/antelope.ts';
 import { committeeStatus } from '../../../src/status.ts';
-import { activities, summary, type Activity, type ActivitySummary, type Period } from '../activity.ts';
+import { activities, summary, type Activity, type ActivitySummary, type ChainKind, type Period } from '../activity.ts';
 import { chainsStatus } from '../chains.ts';
 import { SETTLEMENT_CHAIN } from '../config.ts';
 import { routesBetween } from '../hops.ts';
@@ -84,12 +86,12 @@ export function reservesSoon(deps: Deps) {
   return reservesMemo();
 }
 
-/** The settlement chain and the Antelope registry's chains are Antelope; anything in the EVM registry is EVM. */
-function chainKind(chain: string | null): 'antelope' | 'evm' | null {
+/** The settlement chain and the Antelope registry's chains are Antelope; the EVM, Sui and NEAR registries' are outside. */
+export const chainKind: ChainKind = (chain) => {
   if (chain === null) return null;
-  if (Object.values(EVM_CHAINS).some((c) => c.id === chain)) return 'evm';
+  if (Object.values(EVM_CHAINS).some((c) => c.id === chain) || suiById(chain) || nearById(chain)) return 'outside';
   return chain === SETTLEMENT_CHAIN || antelopeById(chain) ? 'antelope' : null;
-}
+};
 
 /**
  * `/v1/chains`, shared for a minute.

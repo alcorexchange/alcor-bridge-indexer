@@ -265,8 +265,12 @@ export type Period = keyof typeof PERIODS;
 type Duration = { median: number; p90: number } | null;
 type Amounts = { symbol: string; amount: string }[];
 
-/** Which kind of chain a registry id names; null for one this build does not know. */
-export type ChainKind = (chain: string | null) => 'antelope' | 'evm' | null;
+/**
+ * Which side of the bridge a registry id names: an Antelope chain, or one
+ * outside that backs what Antelope holds (EVM, Sui, NEAR); null for one this
+ * build does not know.
+ */
+export type ChainKind = (chain: string | null) => 'antelope' | 'outside' | null;
 
 /** Nearest-rank percentiles of how long delivered transfers took; null with none. */
 function duration(items: Activity[]): Duration {
@@ -320,7 +324,7 @@ export function summary(all: Activity[], period: Period, now: number, kind: Chai
   for (const a of items) byState[a.state]++;
 
   // In and out of Antelope, per asset. A transfer between two Antelope chains,
-  // or between two EVM chains, is neither: it is counted, and moves no total.
+  // or between two outside ones, is neither: it is counted, and moves no total.
   const assets = new Map<string, { symbol: string; precision: number; transfers: number; to: bigint; from: bigint }>();
   for (const a of items) {
     if (!a.asset) continue;
@@ -329,8 +333,8 @@ export function summary(all: Activity[], period: Period, now: number, kind: Chai
     s.transfers++;
     const units = unitsOf(a) ?? 0n;
     const [src, dst] = [kind(a.from.chain), kind(a.to.chain)];
-    if (src === 'evm' && dst === 'antelope') s.to += units;
-    if (src === 'antelope' && dst === 'evm') s.from += units;
+    if (src === 'outside' && dst === 'antelope') s.to += units;
+    if (src === 'antelope' && dst === 'outside') s.from += units;
     assets.set(k, s);
   }
 
