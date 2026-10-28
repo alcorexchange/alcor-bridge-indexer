@@ -151,7 +151,7 @@ test('a journey goes arriving, sending, delivered', () => {
   store.upsertTransfer({ key: withdrawalKey(7), direction: 'withdrawal', ref: 7, status: 'burned', account: HOP, evm_address: 'alice.wam', domain: WAX, src_block: 200, src_time: 2000 });
   j = journey(store, dKey, same, chainOf, HOP, ctx)!;
   assert.equal(j.status, 'sending');
-  assert.equal(j.progress.stage, 'WAX release by the relayer');
+  assert.equal(j.progress.stage, 'Being delivered on WAX');
   assert.ok(j.progress.percent > 50 && j.progress.percent < 100);
   assert.equal(j.legs.length, 1);
   assert.equal(j.recover, null);
@@ -159,7 +159,7 @@ test('a journey goes arriving, sending, delivered', () => {
   store.upsertTransfer({ key: withdrawalKey(7), direction: 'withdrawal', ref: 7, status: 'released', src_block: 200, src_time: 2000 });
   const delivered = journey(store, dKey, same, chainOf, HOP, ctx)!;
   assert.equal(delivered.status, 'delivered');
-  assert.deepEqual(delivered.progress, { stage: 'delivered on WAX', percent: 100, etaSeconds: null, exact: true, waitingOn: null });
+  assert.deepEqual(delivered.progress, { stage: 'Arrived on WAX', percent: 100, etaSeconds: null, exact: true, waitingOn: null });
 
   // Each leg says what it is part of.
   assert.deepEqual(hopLink(store, store.getTransfer(dKey)!, chainOf), {

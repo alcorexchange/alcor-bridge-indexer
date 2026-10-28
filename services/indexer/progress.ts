@@ -111,11 +111,11 @@ export function lateFor(row: TransferRow, ctx: ProgressContext): number | null {
 
 function depositProgress(row: TransferRow, chain: string, ctx: ProgressContext): Progress {
   switch (row.status) {
-    case 'credited': return done('credited on Telos');
-    case 'forwarded': return done('delivered on Telos');
-    case 'bounced': return done(`refused on Telos and sent back to ${chain}`);
+    case 'credited': return done('Arrived on Telos');
+    case 'forwarded': return done('Delivered on Telos');
+    case 'bounced': return done(`Not accepted on Telos — sent back to ${chain}`);
     case 'parked':
-      return { stage: 'credited; handing it on', percent: 97, etaSeconds: PUSH_SECONDS, exact: false, waitingOn: 'bridge' };
+      return { stage: 'Arrived on Telos — forwarding it', percent: 97, etaSeconds: PUSH_SECONDS, exact: false, waitingOn: 'bridge' };
   }
 
   // Seen on its chain, not proved yet. Counted the way the ledger counts it
@@ -134,12 +134,12 @@ function depositProgress(row: TransferRow, chain: string, ctx: ProgressContext):
       };
     }
     if (fast.offered) {
-      return { stage: 'confirmed; proving it on Telos', percent: 95, etaSeconds: PUSH_SECONDS, exact: true, waitingOn: 'bridge' };
+      return { stage: 'Confirmed — verifying it on Telos', percent: 95, etaSeconds: PUSH_SECONDS, exact: true, waitingOn: 'bridge' };
     }
   }
 
   const eta = ctx.depositEta(domain);
-  const stage = ctx.isAntelope(row.domain) ? `${chain} producers confirming` : `waiting for ${chain} to finalize`;
+  const stage = ctx.isAntelope(row.domain) ? `Waiting for ${chain} to confirm it` : `Waiting for ${chain} to confirm it for good`;
   return eta
     ? byTime(stage, row.src_time, eta, ctx.now)
     : { stage, percent: 0, etaSeconds: null, exact: false, waitingOn: 'bridge' };
@@ -147,17 +147,17 @@ function depositProgress(row: TransferRow, chain: string, ctx: ProgressContext):
 
 function withdrawalProgress(row: TransferRow, chain: string, ctx: ProgressContext): Progress {
   switch (row.status) {
-    case 'released': return done(`paid out on ${chain}`);
-    case 'refunded': return done('expired unpaid; refunded on Telos');
+    case 'released': return done(`Arrived on ${chain}`);
+    case 'refunded': return done('Not claimed in time — refunded on Telos');
     case 'expired':
-      return { stage: `expired unpaid on ${chain}; refunding on Telos`, percent: 90, etaSeconds: null, exact: false, waitingOn: 'bridge' };
+      return { stage: 'Not claimed in time — refunding on Telos', percent: 90, etaSeconds: null, exact: false, waitingOn: 'bridge' };
   }
 
   // A relayer pays an Antelope chain; on an EVM chain the recipient releases it.
   const domain = row.domain ?? '';
   if (ctx.isAntelope(row.domain)) {
     const eta = ctx.withdrawalEta(domain);
-    const stage = `${chain} release by the relayer`;
+    const stage = `Being delivered on ${chain}`;
     return eta
       ? byTime(stage, row.src_time, eta, ctx.now)
       : { stage, percent: 0, etaSeconds: null, exact: false, waitingOn: 'bridge' };
@@ -165,10 +165,10 @@ function withdrawalProgress(row: TransferRow, chain: string, ctx: ProgressContex
   // A delivery fee signed with the burn is the courier's to collect: it releases
   // the withdrawal, and the owner has nothing to send.
   if (row.status === 'provable' && BigInt(row.fee ?? '0') > 0n) {
-    return { stage: `the courier releases it on ${chain}`, percent: 75, etaSeconds: null, exact: false, waitingOn: 'bridge' };
+    return { stage: `Being delivered on ${chain}`, percent: 75, etaSeconds: null, exact: false, waitingOn: 'bridge' };
   }
   if (row.status === 'provable') {
-    return { stage: `ready: release it on ${chain}`, percent: 50, etaSeconds: null, exact: true, waitingOn: 'user' };
+    return { stage: `Ready to claim on ${chain}`, percent: 50, etaSeconds: null, exact: true, waitingOn: 'user' };
   }
-  return { stage: 'burned on Telos; freezing its proof', percent: 25, etaSeconds: PUSH_SECONDS, exact: false, waitingOn: 'bridge' };
+  return { stage: 'Waiting for Telos validators to sign it', percent: 25, etaSeconds: PUSH_SECONDS, exact: false, waitingOn: 'bridge' };
 }

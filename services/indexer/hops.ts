@@ -197,9 +197,9 @@ function journeyProgress(
     transferProgress(l.transfer ?? ({ ...deposit, direction: 'withdrawal', status: 'burned', domain: l.hop.to_domain, src_time: l.hop.at } as TransferRow), ctx);
 
   switch (status) {
-    case 'delivered': return finished(`delivered on ${ctx.chainName(to?.domain ?? null)}`);
-    case 'returned': return finished(`returned to ${ctx.chainName(back?.domain ?? null)}`);
-    case 'bounced': return finished(`refused by the hop and sent back to ${ctx.chainName(deposit.domain)}`);
+    case 'delivered': return finished(`Arrived on ${ctx.chainName(to?.domain ?? null)}`);
+    case 'returned': return finished(`Sent back to ${ctx.chainName(back?.domain ?? null)}`);
+    case 'bounced': return finished(`Not accepted — sent back to ${ctx.chainName(deposit.domain)}`);
     case 'arriving': {
       const p = transferProgress(deposit, ctx);
       const onward = to && ctx.isAntelope(to.domain) ? ctx.withdrawalEta(to.domain)?.seconds ?? 0 : 0;
@@ -213,11 +213,11 @@ function journeyProgress(
       const last = legs[legs.length - 1];
       if (last.transfer?.status === 'refunded') {
         return last.hop.prev === null
-          ? { stage: 'not paid out over there; sending it back', percent: 0, etaSeconds: 60, exact: false, waitingOn: 'bridge' }
-          : { stage: 'the way back was not paid out either; waiting for an operator', percent: 0, etaSeconds: null, exact: true, waitingOn: 'bridge' };
+          ? { stage: 'Not delivered there — sending it back', percent: 0, etaSeconds: 60, exact: false, waitingOn: 'bridge' }
+          : { stage: 'Could not be sent back either — waiting for the bridge team', percent: 0, etaSeconds: null, exact: true, waitingOn: 'bridge' };
       }
       const p = legProgress(last);
-      return { ...p, stage: `returning: ${p.stage}` };
+      return { ...p, stage: `On its way back. ${p.stage}` };
     }
   }
 }

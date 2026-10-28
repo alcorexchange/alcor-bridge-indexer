@@ -67,8 +67,8 @@ test('Vaulta\'s timings are seconds both ways, and say they are not measured yet
   assert.equal(withdrawal.measured, false);
   assert.ok(deposit.seconds < 30 && withdrawal.seconds < 30);
   assert.ok(deposit.seconds < antelopeDepositEta(wax).seconds);
-  assert.deepEqual(deposit.parts.map((p) => p.what), ['Vaulta finalizers certify the block', 'the relayer proves it on Telos']);
-  assert.deepEqual(withdrawal.parts.map((p) => p.what), ['Telos finalizes the burn', 'the relayer releases it on Vaulta']);
+  assert.deepEqual(deposit.parts.map((p) => p.what), ['Vaulta confirms the deposit', 'the bridge delivers it to Telos']);
+  assert.deepEqual(withdrawal.parts.map((p) => p.what), ['Telos confirms the withdrawal', 'the bridge delivers it on Vaulta']);
   // WAX's are unchanged.
   assert.equal(antelopeDepositEta(wax).measured, true);
   assert.equal(antelopeWithdrawalEta(wax).parts.length, 3);

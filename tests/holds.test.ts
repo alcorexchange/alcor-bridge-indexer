@@ -35,7 +35,7 @@ const row = (over: Partial<TransferRow>): TransferRow => ({
 test('a parked deposit is held once it has waited past the grace period, not before', () => {
   assert.equal(holdOf(row({ status: 'parked', dst_time: NOW - 60 }), ctx()), null);
   const held = holdOf(row({ status: 'parked', dst_time: NOW - HELD_AFTER_SECONDS }), ctx());
-  assert.deepEqual(held, { flag: 'held', stage: 'held on Telos for review; the funds are safe', until: null });
+  assert.deepEqual(held, { flag: 'held', stage: 'Held for review on Telos — the funds are safe', until: null });
 });
 
 test('a deposit over its backing route\'s cap is over the limit; a spoke and an uncapped route never are', () => {
@@ -54,7 +54,7 @@ test('a withdrawal over what the vault still lets out today waits, with when it 
   assert.equal(holdOf(w('9000000000'), ctx()), null);
   // 1,000 over a 10,000-a-day limit: a tenth of a day.
   assert.deepEqual(holdOf(w('10000000000'), ctx()), {
-    flag: 'daily-limit', stage: 'waiting for the daily withdrawal limit on BNB Chain to refill', until: NOW + 8640,
+    flag: 'daily-limit', stage: "Over today's limit for BNB Chain — it goes out when the limit resets", until: NOW + 8640,
   });
   assert.equal(holdOf(w('10000000000', 'released'), ctx()), null);
   assert.equal(holdOf(w('10000000000', 'expired'), ctx()), null);
@@ -76,7 +76,7 @@ test('a hold replaces the estimate in progress, keeping how far it got', () => {
   });
   const parked = transferProgress(row({ status: 'parked', dst_time: NOW - 3600 }), progressCtx(ctx()));
   assert.deepEqual(parked, {
-    stage: 'held on Telos for review; the funds are safe', percent: 97, etaSeconds: null, exact: false, waitingOn: 'bridge',
+    stage: 'Held for review on Telos — the funds are safe', percent: 97, etaSeconds: null, exact: false, waitingOn: 'bridge',
   });
   const waiting = transferProgress(
     row({ direction: 'withdrawal', status: 'provable', token: 'usdc-bsc', domain: '56', amount: '10000000000' }),

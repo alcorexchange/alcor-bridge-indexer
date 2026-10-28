@@ -39,7 +39,7 @@ const add = (...spans: Span[]): Span =>
  * this is the unattended figure, not a floor.
  */
 const RELAY: Span = { min: 0, typical: 30, max: 60 };
-const RELAY_WHAT = 'the relayer picks the finished proof up';
+const RELAY_WHAT = 'the bridge delivers it to Telos';
 
 /**
  * Telos finality.
@@ -61,7 +61,7 @@ function finality(chain: EvmChain): { what: string; span: Span } {
     // milestone and the next one, then the Heimdall commit carrying that state,
     // two Heimdall blocks of 1.2 s.
     return {
-      what: `a Heimdall milestone over the block and the next one after it`,
+      what: `${chain.name} confirms the deposit`,
       span: { min: 5, typical: 8, max: 20 },
     };
   }
@@ -71,12 +71,12 @@ function finality(chain: EvmChain): { what: string; span: Span } {
     // source. Seconds — which is the figure the API was replacing with thirteen
     // minutes of somebody else's chain.
     return {
-      what: `${chain.name} votes finality into its own headers`,
+      what: `${chain.name} confirms the deposit`,
       span: { min: 1, typical: 2, max: 5 },
     };
   }
   return {
-    what: `${chain.name} must finalize the block`,
+    what: `${chain.name} confirms the deposit for good`,
     // Two epochs, three when justification crosses a missed boundary. Measured
     // the same day: Sepolia sat 18.6 min behind its head, mainnet 16.6 — both
     // inside this span, and both well above the 12.8 min the nominal figure
@@ -147,7 +147,7 @@ export function depositFastEta(chain: EvmChain, confirmations: number): Eta | nu
   const blocks = confirmations * chain.blockTime;
   const fast = eta(
     [
-      { what: `${confirmations} ${chain.name} blocks on top of the deposit`, span: { min: blocks, typical: blocks, max: blocks * 1.5 } },
+      { what: `${confirmations} ${chain.name} confirmations`, span: { min: blocks, typical: blocks, max: blocks * 1.5 } },
       { what: RELAY_WHAT, span: RELAY },
     ],
     true,
@@ -176,9 +176,9 @@ export function withdrawalEta(chain: EvmChain): Eta | null {
   };
   return eta(
     [
-      { what: 'Telos must finalize the burn', span: SAVANNA },
-      { what: RELAY_WHAT, span: RELAY },
-      { what: `the release confirms on ${chain.name}`, span: confirm },
+      { what: 'Telos confirms the withdrawal', span: SAVANNA },
+      { what: 'the bridge prepares the claim', span: RELAY },
+      { what: `your claim confirms on ${chain.name}`, span: confirm },
     ],
     true,
   );
@@ -200,16 +200,16 @@ export function antelopeDepositEta(chain: AntelopeChain): Eta {
   if (chain.consensus === 'savanna') {
     return eta(
       [
-        { what: `${chain.name} finalizers certify the block`, span: chain.deposit.certify },
-        { what: 'the relayer proves it on Telos', span: chain.deposit.prove },
+        { what: `${chain.name} confirms the deposit`, span: chain.deposit.certify },
+        { what: RELAY_WHAT, span: chain.deposit.prove },
       ],
       false,
     );
   }
   return eta(
     [
-      { what: `${chain.name} producers build two rounds of 2/3+1 on top of the block`, span: chain.confirm },
-      { what: 'the relayer proves it on Telos', span: { min: 3, typical: 8, max: 30 } },
+      { what: `${chain.name} confirms the deposit`, span: chain.confirm },
+      { what: RELAY_WHAT, span: { min: 3, typical: 8, max: 30 } },
     ],
     true,
   );
@@ -231,17 +231,17 @@ export function antelopeWithdrawalEta(chain: AntelopeChain): Eta {
   if (chain.consensus === 'savanna') {
     return eta(
       [
-        { what: 'Telos finalizes the burn', span: chain.withdrawal.finalize },
-        { what: `the relayer releases it on ${chain.name}`, span: chain.withdrawal.release },
+        { what: 'Telos confirms the withdrawal', span: chain.withdrawal.finalize },
+        { what: `the bridge delivers it on ${chain.name}`, span: chain.withdrawal.release },
       ],
       false,
     );
   }
   return eta(
     [
-      { what: 'Telos finalizes the burn', span: { min: 1, typical: 2, max: 5 } },
-      { what: '2/3+1 of Telos producers build on the certificate', span: { min: 80, typical: 90, max: 130 } },
-      { what: `the relayer releases it on ${chain.name}`, span: { min: 3, typical: 15, max: 40 } },
+      { what: 'Telos confirms the withdrawal', span: { min: 1, typical: 2, max: 5 } },
+      { what: 'Telos validators sign it', span: { min: 80, typical: 90, max: 130 } },
+      { what: `the bridge delivers it on ${chain.name}`, span: { min: 3, typical: 15, max: 40 } },
     ],
     true,
   );
@@ -251,8 +251,8 @@ export function antelopeWithdrawalEta(chain: AntelopeChain): Eta {
 export function suiDepositEta(chain: SuiChain): Eta {
   return eta(
     [
-      { what: `the ${chain.name} committee certifies the checkpoint`, span: chain.deposit.certify },
-      { what: 'the relayer proves it on Telos', span: chain.deposit.prove },
+      { what: `${chain.name} confirms the deposit`, span: chain.deposit.certify },
+      { what: RELAY_WHAT, span: chain.deposit.prove },
     ],
     false,
   );
@@ -262,8 +262,8 @@ export function suiDepositEta(chain: SuiChain): Eta {
 export function suiWithdrawalEta(chain: SuiChain): Eta {
   return eta(
     [
-      { what: 'Telos finalizes the burn', span: chain.withdrawal.finalize },
-      { what: `the wallet releases it on ${chain.name}`, span: chain.withdrawal.release },
+      { what: 'Telos confirms the withdrawal', span: chain.withdrawal.finalize },
+      { what: `you claim it on ${chain.name}`, span: chain.withdrawal.release },
     ],
     false,
   );
@@ -273,8 +273,8 @@ export function suiWithdrawalEta(chain: SuiChain): Eta {
 export function nearDepositEta(chain: NearChain): Eta {
   return eta(
     [
-      { what: `${chain.name} finalizes the block`, span: chain.deposit.final },
-      { what: 'the relayer proves it on Telos', span: chain.deposit.prove },
+      { what: `${chain.name} confirms the deposit`, span: chain.deposit.final },
+      { what: RELAY_WHAT, span: chain.deposit.prove },
     ],
     false,
   );
@@ -284,8 +284,8 @@ export function nearDepositEta(chain: NearChain): Eta {
 export function nearWithdrawalEta(chain: NearChain): Eta {
   return eta(
     [
-      { what: 'Telos finalizes the burn', span: chain.withdrawal.finalize },
-      { what: `the wallet releases it on ${chain.name}`, span: chain.withdrawal.release },
+      { what: 'Telos confirms the withdrawal', span: chain.withdrawal.finalize },
+      { what: `you claim it on ${chain.name}`, span: chain.withdrawal.release },
     ],
     false,
   );

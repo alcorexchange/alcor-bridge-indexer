@@ -550,8 +550,8 @@ for the pair this process was configured with.
           "seconds": 32, "range": [1, 65], "measured": true,
           "human": "about 32 s (1 s\u201365 s)",
           "parts": [
-            { "what": "BNB Smart Chain votes finality into its own headers", "seconds": 2 },
-            { "what": "the relayer picks the finished proof up", "seconds": 30 }
+            { "what": "BNB Smart Chain confirms the deposit", "seconds": 2 },
+            { "what": "the bridge delivers it to Telos", "seconds": 30 }
           ]
         },
         "withdrawal": { "seconds": 32, "range": [1, 64], "measured": true,
@@ -724,7 +724,7 @@ The queue of everything waiting for somebody to sign. This is the screen.
       "symbol": "ETH",
       "precision": 8,
       "deadline": { "at": 1790693001, "secondsLeft": 874200,
-                    "what": "after this only expire is possible, not release" }
+                    "what": "after this it can no longer be claimed, only cancelled and refunded on Telos" }
     }
   ],
   "count": 1
@@ -927,7 +927,7 @@ have. `limit` defaults to 50, caps at 500. Rows are newest first.
   "dst_block": 491538543, "dst_time": 1790789646, "dst_tx": "b1879643…",
   "deadline": null, "secondsToDeadline": null, "memo": null, "fee": null,
   "flags": [], "hasProof": false, "track": null,
-  "progress": { "stage": "credited on Telos", "percent": 100, "etaSeconds": null, "exact": true, "waitingOn": null },
+  "progress": { "stage": "Arrived on Telos", "percent": 100, "etaSeconds": null, "exact": true, "waitingOn": null },
   "state": "delivered"
 }
 ```
@@ -1331,7 +1331,7 @@ that sends a refused deposit back are never items of their own.
     "to":   { "chain": "mainnet", "recipient": "0xee06…20d2" },
     "asset": { "symbol": "ETH", "precision": 8 }, "amount": "0.00206223",
     "state": "action_needed", "waitingOn": "user",
-    "stage": "ready: release it on Ethereum",
+    "stage": "Ready to claim on Ethereum",
     "percent": 50, "exact": true, "etaAt": null,
     "startedAt": 1791210219, "finishedAt": null,
     "srcTx": "a8ae…b191", "dstTx": null } ],

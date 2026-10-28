@@ -46,21 +46,21 @@ test('an Ethereum deposit on the fast path is counted in confirmations, as the l
     stage: '5 of 12 confirmations on Ethereum', percent: 38, etaSeconds: 7 * 12 + 5, exact: true, waitingOn: 'bridge',
   });
   const twelve = transferProgress(row({ src_block: 993 }), ctx);
-  assert.deepEqual([twelve.stage, twelve.percent], ['confirmed; proving it on Telos', 95]);
+  assert.deepEqual([twelve.stage, twelve.percent], ['Confirmed — verifying it on Telos', 95]);
   const eleven = transferProgress(row({ src_block: 994 }), ctx);
   assert.equal(eleven.stage, '11 of 12 confirmations on Ethereum');
   const confirmed = transferProgress(row({ src_block: 990 }), ctx);
-  assert.deepEqual([confirmed.stage, confirmed.percent], ['confirmed; proving it on Telos', 95]);
+  assert.deepEqual([confirmed.stage, confirmed.percent], ['Confirmed — verifying it on Telos', 95]);
 });
 
 test('a deposit over the fast ceiling waits for finality, estimated', () => {
   const p = transferProgress(row({ amount: '6000000000', src_time: NOW - 450 }), ctx);
-  assert.deepEqual(p, { stage: 'waiting for Ethereum to finalize', percent: 45, etaSeconds: 450, exact: false, waitingOn: 'bridge' });
+  assert.deepEqual(p, { stage: 'Waiting for Ethereum to confirm it for good', percent: 45, etaSeconds: 450, exact: false, waitingOn: 'bridge' });
 });
 
 test('a WAX deposit is estimated from the measured producer rounds, and never claims to be done', () => {
   const p = transferProgress(row({ domain: WAX, src_time: NOW - 20 }), ctx);
-  assert.equal(p.stage, 'WAX producers confirming');
+  assert.equal(p.stage, 'Waiting for WAX to confirm it');
   assert.equal(p.exact, false);
   assert.equal(p.etaSeconds, antelopeDepositEta(waxChain).seconds - 20);
   const late = transferProgress(row({ domain: WAX, src_time: NOW - 600 }), ctx);
@@ -69,21 +69,21 @@ test('a WAX deposit is estimated from the measured producer rounds, and never cl
 
 test('a withdrawal to Ethereum waits on the user once provable, with no ETA', () => {
   const p = transferProgress(row({ direction: 'withdrawal', status: 'provable' }), ctx);
-  assert.deepEqual(p, { stage: 'ready: release it on Ethereum', percent: 50, etaSeconds: null, exact: true, waitingOn: 'user' });
+  assert.deepEqual(p, { stage: 'Ready to claim on Ethereum', percent: 50, etaSeconds: null, exact: true, waitingOn: 'user' });
 });
 
 test('a withdrawal with a delivery fee is the courier\'s to release, not the user\'s', () => {
   const p = transferProgress(row({ direction: 'withdrawal', status: 'provable', fee: '21000' }), ctx);
-  assert.deepEqual(p, { stage: 'the courier releases it on Ethereum', percent: 75, etaSeconds: null, exact: false, waitingOn: 'bridge' });
+  assert.deepEqual(p, { stage: 'Being delivered on Ethereum', percent: 75, etaSeconds: null, exact: false, waitingOn: 'bridge' });
   assert.equal(transferProgress(row({ direction: 'withdrawal', status: 'provable', fee: '0' }), ctx).waitingOn, 'user');
 });
 
 test('finished crossings are 100 with nothing waiting', () => {
   for (const [direction, status, stage] of [
-    ['deposit', 'credited', 'credited on Telos'],
-    ['deposit', 'forwarded', 'delivered on Telos'],
-    ['withdrawal', 'released', 'paid out on Ethereum'],
-    ['withdrawal', 'refunded', 'expired unpaid; refunded on Telos'],
+    ['deposit', 'credited', 'Arrived on Telos'],
+    ['deposit', 'forwarded', 'Delivered on Telos'],
+    ['withdrawal', 'released', 'Arrived on Ethereum'],
+    ['withdrawal', 'refunded', 'Not claimed in time — refunded on Telos'],
   ] as const) {
     assert.deepEqual(transferProgress(row({ direction, status }), ctx), { stage, percent: 100, etaSeconds: null, exact: true, waitingOn: null });
   }

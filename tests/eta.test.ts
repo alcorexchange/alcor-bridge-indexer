@@ -15,7 +15,7 @@ test('twelve Ethereum confirmations and the push: about three minutes, as measur
   assert.ok(fast);
   assert.equal(fast.seconds, 12 * 12 + 30);
   assert.ok(fast.seconds < depositEta(ethereum).seconds);
-  assert.equal(fast.parts[0]!.what, '12 Ethereum blocks on top of the deposit');
+  assert.equal(fast.parts[0]!.what, '12 Ethereum confirmations');
 });
 
 test('no fast path: no wait to say', () => {

@@ -75,7 +75,7 @@ test('a hop is one transfer keyed by its deposit, and its leg is not a transfer 
     amount: '44125.906',
     state: 'delivered',
     waitingOn: null,
-    stage: 'delivered on WAX',
+    stage: 'Arrived on WAX',
     percent: 100,
     exact: true,
     etaAt: null,
@@ -105,7 +105,7 @@ test('a hop whose leg waits for a release on Ethereum needs the user', () => {
   assert.equal(a.key, dKey);
   assert.equal(a.state, 'action_needed');
   assert.equal(a.waitingOn, 'user');
-  assert.equal(a.stage, 'ready: release it on Ethereum');
+  assert.equal(a.stage, 'Ready to claim on Ethereum');
   assert.equal(a.finishedAt, null);
   assert.equal(a.dstTx, null);
 });

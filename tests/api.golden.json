@@ -90,7 +90,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting for Ethereum to finalize",
+    "stage": "Waiting for Ethereum to confirm it for good",
     "percent": 95,
     "etaSeconds": 5,
     "exact": false,
@@ -140,7 +140,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting for Ethereum to finalize",
+    "stage": "Waiting for Ethereum to confirm it for good",
     "percent": 5,
     "etaSeconds": 930,
     "exact": false,
@@ -190,7 +190,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting for Polygon PoS to finalize",
+    "stage": "Waiting for Polygon PoS to confirm it for good",
     "percent": 95,
     "etaSeconds": 5,
     "exact": false,
@@ -240,7 +240,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting for BNB Smart Chain to finalize",
+    "stage": "Waiting for BNB Smart Chain to confirm it for good",
     "percent": 95,
     "etaSeconds": 5,
     "exact": false,
@@ -290,7 +290,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting for Polygon PoS to finalize",
+    "stage": "Waiting for Polygon PoS to confirm it for good",
     "percent": 95,
     "etaSeconds": 5,
     "exact": false,
@@ -344,7 +344,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "expired unpaid on BNB Smart Chain; refunding on Telos",
+    "stage": "Not claimed in time — refunding on Telos",
     "percent": 90,
     "etaSeconds": null,
     "exact": false,
@@ -396,7 +396,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting: Ethereum is not paying this token out right now",
+    "stage": "Withdrawals of this token to Ethereum are paused — the funds are safe",
     "percent": 25,
     "etaSeconds": null,
     "exact": false,
@@ -448,7 +448,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting: Ethereum is not paying this token out right now",
+    "stage": "Withdrawals of this token to Ethereum are paused — the funds are safe",
     "percent": 75,
     "etaSeconds": null,
     "exact": false,
@@ -494,7 +494,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "burned on Telos; freezing its proof",
+    "stage": "Waiting for Telos validators to sign it",
     "percent": 25,
     "etaSeconds": 5,
     "exact": false,
@@ -544,7 +544,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "WAX producers confirming",
+    "stage": "Waiting for WAX to confirm it",
     "percent": 95,
     "etaSeconds": 5,
     "exact": false,
@@ -594,7 +594,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "WAX release by the relayer",
+    "stage": "Being delivered on WAX",
     "percent": 50,
     "etaSeconds": 47,
     "exact": false,
@@ -644,7 +644,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "credited on Telos",
+    "stage": "Arrived on Telos",
     "percent": 100,
     "etaSeconds": null,
     "exact": true,
@@ -694,7 +694,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting for BNB Smart Chain to finalize",
+    "stage": "Waiting for BNB Smart Chain to confirm it for good",
     "percent": 95,
     "etaSeconds": 5,
     "exact": false,
@@ -746,7 +746,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting: Ethereum is not paying this token out right now",
+    "stage": "Withdrawals of this token to Ethereum are paused — the funds are safe",
     "percent": 25,
     "etaSeconds": null,
     "exact": false,
@@ -799,7 +799,7 @@
    "hop": null,
    "swap": null,
    "progress": {
-    "stage": "waiting: Ethereum is not paying this token out right now",
+    "stage": "Withdrawals of this token to Ethereum are paused — the funds are safe",
     "percent": 75,
     "etaSeconds": null,
     "exact": false,
@@ -835,7 +835,7 @@
      "deadline": {
       "at": 1800086400,
       "secondsLeft": 86400,
-      "what": "after this only expire is possible, not release"
+      "what": "after this it can no longer be claimed, only cancelled and refunded on Telos"
      }
     },
     {
@@ -854,7 +854,7 @@
      "deadline": {
       "at": 1800086400,
       "secondsLeft": 86400,
-      "what": "after this only expire is possible, not release"
+      "what": "after this it can no longer be claimed, only cancelled and refunded on Telos"
      }
     },
     {
@@ -863,7 +863,7 @@
      "action": "released by the WAX relayer",
      "pushOn": "wax",
      "ready": false,
-     "reason": "WAX release by the relayer",
+     "reason": "Being delivered on WAX",
      "proof": null,
      "account": "alice",
      "evmAddress": "bob",
@@ -877,7 +877,7 @@
      "action": "proved by the WAX relayer",
      "pushOn": "telos",
      "ready": false,
-     "reason": "WAX producers confirming",
+     "reason": "Waiting for WAX to confirm it",
      "proof": null,
      "account": "alice",
      "evmAddress": "bob",
@@ -915,7 +915,7 @@
      "deadline": {
       "at": 1800086400,
       "secondsLeft": 86400,
-      "what": "after this only expire is possible, not release"
+      "what": "after this it can no longer be claimed, only cancelled and refunded on Telos"
      }
     },
     {
@@ -934,7 +934,7 @@
      "deadline": {
       "at": 1800086400,
       "secondsLeft": 86400,
-      "what": "after this only expire is possible, not release"
+      "what": "after this it can no longer be claimed, only cancelled and refunded on Telos"
      }
     },
     {
@@ -1032,7 +1032,7 @@
      "action": "waiting",
      "pushOn": "telos",
      "ready": false,
-     "reason": "BNB Smart Chain votes finality into its own headers — about 32 s (1 s–65 s)",
+     "reason": "BNB Smart Chain confirms the deposit — about 32 s (1 s–65 s)",
      "proof": null,
      "account": "alice",
      "evmAddress": "0xabc",
@@ -1499,11 +1499,11 @@
        ],
        "parts": [
         {
-         "what": "Ethereum must finalize the block",
+         "what": "Ethereum confirms the deposit for good",
          "seconds": 960
         },
         {
-         "what": "the relayer picks the finished proof up",
+         "what": "the bridge delivers it to Telos",
          "seconds": 30
         }
        ],
@@ -1518,15 +1518,15 @@
        ],
        "parts": [
         {
-         "what": "Telos must finalize the burn",
+         "what": "Telos confirms the withdrawal",
          "seconds": 1
         },
         {
-         "what": "the relayer picks the finished proof up",
+         "what": "the bridge prepares the claim",
          "seconds": 30
         },
         {
-         "what": "the release confirms on Ethereum",
+         "what": "your claim confirms on Ethereum",
          "seconds": 24
         }
        ],
@@ -1541,11 +1541,11 @@
        ],
        "parts": [
         {
-         "what": "12 Ethereum blocks on top of the deposit",
+         "what": "12 Ethereum confirmations",
          "seconds": 144
         },
         {
-         "what": "the relayer picks the finished proof up",
+         "what": "the bridge delivers it to Telos",
          "seconds": 30
         }
        ],
@@ -1617,11 +1617,11 @@
        ],
        "parts": [
         {
-         "what": "BNB Smart Chain votes finality into its own headers",
+         "what": "BNB Smart Chain confirms the deposit",
          "seconds": 2
         },
         {
-         "what": "the relayer picks the finished proof up",
+         "what": "the bridge delivers it to Telos",
          "seconds": 30
         }
        ],
@@ -1636,15 +1636,15 @@
        ],
        "parts": [
         {
-         "what": "Telos must finalize the burn",
+         "what": "Telos confirms the withdrawal",
          "seconds": 1
         },
         {
-         "what": "the relayer picks the finished proof up",
+         "what": "the bridge prepares the claim",
          "seconds": 30
         },
         {
-         "what": "the release confirms on BNB Smart Chain",
+         "what": "your claim confirms on BNB Smart Chain",
          "seconds": 1
         }
        ],
@@ -1716,11 +1716,11 @@
        ],
        "parts": [
         {
-         "what": "a Heimdall milestone over the block and the next one after it",
+         "what": "Polygon PoS confirms the deposit",
          "seconds": 8
         },
         {
-         "what": "the relayer picks the finished proof up",
+         "what": "the bridge delivers it to Telos",
          "seconds": 30
         }
        ],
@@ -1735,15 +1735,15 @@
        ],
        "parts": [
         {
-         "what": "Telos must finalize the burn",
+         "what": "Telos confirms the withdrawal",
          "seconds": 1
         },
         {
-         "what": "the relayer picks the finished proof up",
+         "what": "the bridge prepares the claim",
          "seconds": 30
         },
         {
-         "what": "the release confirms on Polygon PoS",
+         "what": "your claim confirms on Polygon PoS",
          "seconds": 3
         }
        ],
@@ -1840,11 +1840,11 @@
        ],
        "parts": [
         {
-         "what": "WAX producers build two rounds of 2/3+1 on top of the block",
+         "what": "WAX confirms the deposit",
          "seconds": 42
         },
         {
-         "what": "the relayer proves it on Telos",
+         "what": "the bridge delivers it to Telos",
          "seconds": 8
         }
        ],
@@ -1859,15 +1859,15 @@
        ],
        "parts": [
         {
-         "what": "Telos finalizes the burn",
+         "what": "Telos confirms the withdrawal",
          "seconds": 2
         },
         {
-         "what": "2/3+1 of Telos producers build on the certificate",
+         "what": "Telos validators sign it",
          "seconds": 90
         },
         {
-         "what": "the relayer releases it on WAX",
+         "what": "the bridge delivers it on WAX",
          "seconds": 15
         }
        ],
@@ -2203,7 +2203,7 @@
    "amount": "0.005",
    "state": "delivered",
    "waitingOn": null,
-   "stage": "credited on Telos",
+   "stage": "Arrived on Telos",
    "percent": 100,
    "exact": true,
    "etaAt": null,
@@ -2233,7 +2233,7 @@
    "amount": "0.03",
    "state": "in_progress",
    "waitingOn": "bridge",
-   "stage": "waiting: Ethereum is not paying this token out right now",
+   "stage": "Withdrawals of this token to Ethereum are paused — the funds are safe",
    "percent": 75,
    "exact": false,
    "etaAt": null,
@@ -2263,7 +2263,7 @@
    "amount": "0.03",
    "state": "returned",
    "waitingOn": "bridge",
-   "stage": "expired unpaid on BNB Smart Chain; refunding on Telos",
+   "stage": "Not claimed in time — refunding on Telos",
    "percent": 90,
    "exact": false,
    "etaAt": null,

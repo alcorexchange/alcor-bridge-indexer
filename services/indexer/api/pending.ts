@@ -231,7 +231,7 @@ async function pending(
             deadline: {
               at: r.deadline,
               secondsLeft: r.deadline - now,
-              what: 'after this only expire is possible, not release',
+              what: 'after this it can no longer be claimed, only cancelled and refunded on Telos',
             },
           }
         : {}),

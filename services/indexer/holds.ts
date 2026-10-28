@@ -65,7 +65,7 @@ function depositHold(row: TransferRow, ctx: HoldContext): Hold | null {
   if (row.status === 'parked') {
     const since = row.dst_time ?? row.src_time;
     if (ctx.now - since < HELD_AFTER_SECONDS) return null;
-    return { flag: 'held', stage: 'held on Telos for review; the funds are safe', until: null };
+    return { flag: 'held', stage: 'Held for review on Telos — the funds are safe', until: null };
   }
   if (row.status !== 'seen' && row.status !== 'provable') return null;
 
@@ -74,7 +74,7 @@ function depositHold(row: TransferRow, ctx: HoldContext): Hold | null {
   if (route.backing + BigInt(row.amount) <= route.cap) return null;
   return {
     flag: 'over-limit',
-    stage: 'above the route\'s current limit; held for review, the funds are safe',
+    stage: 'More than the bridge takes right now — held for review, the funds are safe',
     until: null,
   };
 }
@@ -89,11 +89,11 @@ function withdrawalHold(row: TransferRow, ctx: HoldContext): Hold | null {
   const chain = ctx.chainName(row.domain);
   // A limit of zero lets nothing out and never refills: an operator's stop, not a wait.
   if (outflow.perDay === 0n) {
-    return { flag: 'daily-limit', stage: `waiting: ${chain} is not paying this token out right now`, until: null };
+    return { flag: 'daily-limit', stage: `Withdrawals of this token to ${chain} are paused — the funds are safe`, until: null };
   }
   return {
     flag: 'daily-limit',
-    stage: `waiting for the daily withdrawal limit on ${chain} to refill`,
+    stage: `Over today's limit for ${chain} — it goes out when the limit resets`,
     until: ctx.now + Number(((amount - outflow.left) * BigInt(DAY) + outflow.perDay - 1n) / outflow.perDay),
   };
 }
