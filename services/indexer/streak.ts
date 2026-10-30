@@ -7,7 +7,7 @@
 
 const LASTING_MS = 5 * 60_000;
 /** Longer than a poll and the longest restart backoff: a pause this long means it recovered. */
-const GAP_MS = 2 * 60_000;
+export const GAP_MS = 2 * 60_000;
 
 export class FailureStreak {
   private readonly say: (detail: string) => void;

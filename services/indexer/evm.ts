@@ -35,6 +35,7 @@ import { updateFromBlocks, slotForTimestamp, ancestryOfLength } from '../../src/
 import { buildProofBundle } from '../../src/evm/proofBundle.ts';
 import { CheckpointProver } from './checkpoint.ts';
 import { RetryLater } from './retryLater.ts';
+import { FailureStreak, GAP_MS } from './streak.ts';
 import { ParliaProver } from '../../src/bsc/parlia.ts';
 import { MilestoneProver } from './milestone.ts';
 import type { Frozen, LogToFreeze, Prover } from '../../src/proof/prover.ts';
@@ -55,6 +56,15 @@ const LOG_SPAN = 2_000;
  * The range is simply asked for again on the next poll.
  */
 const HEAD_RACE = /beyond current head|exceeds the latest block|after latest block/i;
+
+/**
+ * The settled check only tidies statuses the poller missed, once a minute: a
+ * pruned or lagging upstream (`missing trie node`) costs it nothing but a pass.
+ * Filed when it has not worked for half an hour.
+ */
+const SETTLED_LASTING_MS = 30 * 60_000;
+/** Longer than a slow pass, whose history searches can take minutes. */
+const SETTLED_GAP_MS = 15 * 60_000;
 
 /** The address in the low twenty bytes of a word: a topic, or what `eth_call` returned. */
 const addressFromWord = (w: string) => '0x' + w.slice(-40).toLowerCase();
@@ -141,6 +151,11 @@ export class EvmFollower {
   private awaitingFinality = new Map<string, PendingLog>();
   /** A freeze that failed waits before the next try, instead of retrying every poll. */
   private readonly freezeRetry = new RetryLater();
+  /** Settled checks that fail are filed only when they keep failing. */
+  private readonly settledFailing = new FailureStreak(
+    (detail) => this.store.incident('settled-check', `${this.chain.id}: ${detail}`),
+    { lastingMs: SETTLED_LASTING_MS, gapMs: SETTLED_GAP_MS },
+  );
 
   readonly state: EvmState = {
     at: 0, head: 0, caughtUp: false, deposits: 0, frozen: 0, roots: 0, lastError: null,
@@ -332,6 +347,11 @@ export class EvmFollower {
     this.state.atMovedAt = Math.floor(Date.now() / 1000);
     this.recoverPending();
 
+    // Polls that fail are filed only when they keep failing: the gateway's
+    // upstreams come and go. A slow poll must not look like a pause between failures.
+    const pollFailing = new FailureStreak((detail) => this.store.incident('evm-poll', detail), {
+      gapMs: Math.max(GAP_MS, 3 * this.pollMs),
+    });
     while (!this.stopped) {
       try {
         await this.tick();
@@ -344,7 +364,7 @@ export class EvmFollower {
           this.state.headRaces++;
         } else {
           this.state.lastError = message;
-          this.store.incident('evm-poll', message);
+          pollFailing.failed(message);
           console.log(`[evm:${this.chain.id}] ${message}`);
         }
       }
@@ -866,7 +886,8 @@ export class EvmFollower {
         console.log(`[evm:${this.chain.id}] withdrawal ${t.ref} was already ${found?.status ?? 'settled'} on chain`);
         fixed++;
       } catch (err) {
-        this.store.incident('settled-check', `withdrawal ${t.ref}: ${(err as Error).message}`);
+        this.settledFailing.failed(`withdrawal ${t.ref}: ${(err as Error).message}`);
+        console.log(`[evm:${this.chain.id}] settled check, withdrawal ${t.ref}: ${(err as Error).message}`);
       }
     }
     return fixed;
